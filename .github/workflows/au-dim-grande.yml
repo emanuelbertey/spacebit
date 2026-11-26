@@ -1,0 +1,29 @@
+name: Au en dim mas grande (D=256)
+
+# Prueba el esquema Au con dimension de anillo mayor (D=256 en vez de 64).
+# Reutiliza test/au_d256_intento.c, no toca ninguna fuente original.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  au_d256:
+    name: Au con D=256 - compilar y correr
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+      - name: Compilar au_dim_grande.exe con -DD=256
+        run: bash test/build/build.sh auditor test/au_d256_intento.c au_dim_grande.exe -DD=256 -Wl,--stack,67108864
+      - name: Correr prueba (D=256)
+        run: printf '\n' | ./artifacts/au_dim_grande.exe
