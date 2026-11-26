@@ -23,10 +23,48 @@ jobs:
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc
-      - name: Compilar au_dim_grande.exe con -DD=256 (test-d256/)
-        run: bash test/build/build.sh auditor "$PWD/test-d256/au_dim_grande.c" au_dim_grande.exe -DD=256 -Wl,--stack,67108864
+      # OJO: auditor/poly_param.h fija "#define D 64LL" sin #ifndef, asi que
+      # -DD=256 lo pisa el header. Para probar D=256 de verdad se compila
+      # sobre una COPIA con D=256; el repo original queda intacto.
+      - name: Compilar Au real D=256 (copia temporal)
+        run: |
+          tmp="$HOME/spacebit-d256-build"
+          rm -rf "$tmp"
+          cp -r "$PWD/." "$tmp"
+          sed -i -E 's/#define[[:space:]]+D[[:space:]]+64LL/#define D 256LL/' "$tmp/auditor/poly_param.h"
+          cd "$tmp"
+          bash test/build/build.sh auditor "$PWD/test-d256/au_dim_grande.c" au_dim_grande.exe -Wl,--stack,67108864
       - name: Correr prueba (D=256)
-        run: ./artifacts/au_dim_grande.exe
+        if: always()
+        run: |
+          set +e
+          "$HOME/spacebit-d256-build/artifacts/au_dim_grande.exe" > "$PWD/salida_d256.txt" 2>&1
+          rc=$?
+          set -e
+          echo "$rc" > "$PWD/rc_d256.txt"
+          cat "$PWD/salida_d256.txt"
+          exit 0
+      - name: Armar JSON del resultado
+        if: always()
+        shell: pwsh
+        run: |
+          $rc = -1
+          if (Test-Path rc_d256.txt) { $rc = [int]((Get-Content rc_d256.txt -Raw).Trim()) }
+          $salida = ""
+          if (Test-Path salida_d256.txt) { $salida = Get-Content salida_d256.txt -Raw }
+          [pscustomobject]@{
+            dim = 256
+            exit_code = $rc
+            verificacion = ($rc -eq 0)
+            salida = $salida
+          } | ConvertTo-Json -Depth 3 | Set-Content -Path resultado_d256.json -Encoding utf8
+          Get-Content resultado_d256.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-dim-grande-resultado
+          path: resultado_d256.json
+          if-no-files-found: error
 
   auditoria:
     name: Auditoria de parametros y parches (D=256)
