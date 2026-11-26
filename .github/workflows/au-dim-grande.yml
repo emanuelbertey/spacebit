@@ -1,7 +1,7 @@
 name: Au en dim mas grande (D=256)
 
 # Prueba el esquema Au con dimension de anillo mayor (D=256 en vez de 64).
-# Reutiliza test/au_d256_intento.c, no toca ninguna fuente original.
+# Test nuevo en test-d256/au_dim_grande.c; no toca ninguna fuente original.
 on:
   push:
   workflow_dispatch:
@@ -23,7 +23,42 @@ jobs:
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc
-      - name: Compilar au_dim_grande.exe con -DD=256
-        run: bash test/build/build.sh auditor test/au_d256_intento.c au_dim_grande.exe -DD=256 -Wl,--stack,67108864
+      - name: Compilar au_dim_grande.exe con -DD=256 (test-d256/)
+        run: bash test/build/build.sh auditor "$PWD/test-d256/au_dim_grande.c" au_dim_grande.exe -DD=256 -Wl,--stack,67108864
       - name: Correr prueba (D=256)
-        run: printf '\n' | ./artifacts/au_dim_grande.exe
+        run: ./artifacts/au_dim_grande.exe
+
+  auditoria:
+    name: Auditoria de parametros y parches (D=256)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # Audita sobre una COPIA con D=256; el repo original queda intacto.
+      - name: Auditar parametros con D=256
+        shell: bash
+        run: |
+          tmp="$RUNNER_TEMP/spacebit-d256"
+          rm -rf "$tmp"
+          cp -r "$GITHUB_WORKSPACE/." "$tmp"
+          sed -i -E 's/#define[[:space:]]+D[[:space:]]+64LL/#define D 256LL/' "$tmp/auditor/poly_param.h"
+          rc=0
+          python "$tmp/security/audit_config.py" || rc=$?
+          cp "$tmp/security/audit_report.json" audit_report_d256.json
+          exit $rc
+      - name: Publicar en el resumen
+        if: always()
+        shell: bash
+        run: |
+          echo "## Auditoria de parametros (D=256)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat audit_report_d256.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-dim-grande-auditoria
+          path: audit_report_d256.json
+          if-no-files-found: error
