@@ -234,16 +234,17 @@ static void intt_core(uint64_t *a, const uint64_t q, const uint64_t psi) {
     }
   }
 
-  /* inverse Cooley-Tukey */
+  /* Cooley-Tukey con winv: MISMA mariposa del forward (ww multiplica a v),
+   * no la mariposa de Gentleman-Sande. Mezclarlas rompe el roundtrip. */
   for (len = 2; len <= n; len <<= 1) {
     wl = modpow_q(winv, n / len, q);
     for (i = 0; i < n; i += len) {
       ww = 1;
       for (j = 0; j < (len >> 1); j++) {
         u = a[i + j];
-        v = a[i + j + (len >> 1)];
+        v = (a[i + j + (len >> 1)] * ww) % q;
         a[i + j] = (u + v) % q;
-        a[i + j + (len >> 1)] = ((u + q - v) % q) * ww % q;
+        a[i + j + (len >> 1)] = (u + q - v) % q;
         ww = (ww * wl) % q;
       }
     }
