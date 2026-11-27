@@ -324,6 +324,14 @@ int main(void) {
          (long long)N_SPENT);
   fflush(stdout);
 
+  /* Mismo testimonio, mismo setup: primero lo verifica el propio modo denso. */
+  qbig_mode = 0;
+  v = verify(a_in, pk_out, cn_out, &out, &s, g, h, g_hat, t0, t1, t2);
+  printf("verificacion base (DENSO, mismo testimonio): %s (v=%llu)\n",
+         v ? "OK" : "FALLA", (unsigned long long)v);
+  fflush(stdout);
+  if (!v) return 5;
+
   /* El mismo testimonio lo lee el modo subanillo. */
   setup_to_sub();
   qbig_mode = 1;
