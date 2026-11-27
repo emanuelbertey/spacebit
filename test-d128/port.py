@@ -593,7 +593,7 @@ def ntt_py_sub(a, q, eta):
         for qi in range(K):
             tmp.append(a[qi * 4 + r] % q * pw % q)
             pw = pw * eta % q
-        bitrev(tmp)
+        _bitrev(tmp)
         length = 2
         while length <= K:
             wl = pow(zeta, K // length, q)
