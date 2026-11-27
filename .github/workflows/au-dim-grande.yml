@@ -164,6 +164,8 @@ jobs:
             salida = $salida
           } | ConvertTo-Json -Depth 3 | Set-Content -Path resultado_d128.json -Encoding utf8
           Get-Content resultado_d128.json
+          $res = Get-Content resultado_d128.json -Raw
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Resultado D=128`n`````json`n$res`n`````"
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -171,3 +173,13 @@ jobs:
           name: au-d128-resultado
           path: resultado_d128.json
           if-no-files-found: error
+
+      - name: Estado final de la prueba
+        if: always()
+        run: |
+          rc=$(cat rc_d128.txt 2>/dev/null || echo 127)
+          if [ "$rc" -ne 0 ]; then
+            echo "Prueba D=128 FALLO (rc=$rc)" >&2
+            exit 1
+          fi
+          echo "Prueba D=128 OK (rc=0)"
