@@ -1,0 +1,109 @@
+name: Au - srank 2/3/4 (lw=5) y tiempos 10/30/50
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  modelo:
+    name: Coste SIS - sisrank 2/3/4 con lwerank=5
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr
+        shell: bash
+        run: |
+          python - <<'PY' > costes.json
+          import json, sys
+          sys.path.insert(0, "security")
+          import MSIS_security as sis
+          from MSIS_security import SIS_linf_cost, SIS_optimize_attack
+          from model_BKZ import svp_quantum
+          Q, D, LW = 2147221513, 256, 5
+          B = [63307776-448, 5229773-448, 98304-8, 10240-8, 10240]
+          sis.MIN_b, sis.STEPS_b, sis.STEPS_m = 40, 10, 10
+          out = {"d": D, "lwerank": LW, "nota": "modelo, no protocolo"}
+          for s in (5,):
+              m = [1, 3, s + LW, 1, 3]
+              mm = [D*x for x in m]
+              h = D*s
+              filas = []
+              for v in (0, 1, 2):
+                  p = sis.MSISParameterSet(D, sum(m), s, *B, *m, Q, norm="linf")
+                  w, b, c = SIS_optimize_attack(
+                      Q, D*sum(m), h, B[0], mm[0], B[1], mm[1], B[2], mm[2],
+                      B[3], mm[3], B[4], mm[4], cost_attack=SIS_linf_cost,
+                      cost_svp=svp_quantum, verbose=False, attack_variant=v)
+                  filas.append({"v": v, "bkz": int(b), "cost_bits": round(float(c),2)})
+              out[f"sisrank_{s}"] = {"h": h, "corridas": filas,
+                                     "min": min(f["cost_bits"] for f in filas)}
+          print(json.dumps(out, indent=2))
+          PY
+          cat costes.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srank-costes
+          path: costes.json
+
+  firmas:
+    name: Firmar y verificar 10/30/50
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+      - name: Fuentes Au
+        shell: bash
+        run: |
+          SKIP_EXTRA=gentdrow.c bash test/build/build.sh \
+            auditor "$PWD/test-d128/recover_gadget.c" recover_gadget.exe
+          ./artifacts/recover_gadget.exe > gadget_polys.txt
+          python test-d128/port.py --gadget gadget_polys.txt --tg-factor 8 --out auditor_d128
+      - name: Correr firmas
+        run: |
+          set -e
+          for n in 10 30 50; do
+            echo "=== N=$n ==="
+            bash test/build/build.sh "$PWD/auditor_d128" \
+              "$PWD/test-d128/au_dim_grande.c" "firma_$n.exe" \
+              -DBETA=$n -Wl,--stack,134217728
+            set +e
+            "$PWD/artifacts/firma_$n.exe" > "$PWD/out_$n.txt" 2>&1
+            rc=$?
+            set -e
+            echo "$rc" > "$PWD/rc_$n.txt"
+            cat "$PWD/out_$n.txt"
+          done
+      - name: JSON
+        if: always()
+        shell: pwsh
+        run: |
+          $casos = @()
+          foreach ($n in @(10,30,50)) {
+            $rc = -1
+            if (Test-Path "rc_$n.txt") { $rc = [int]((Get-Content "rc_$n.txt" -Raw).Trim()) }
+            $sal = ""
+            if (Test-Path "out_$n.txt") { $sal = Get-Content "out_$n.txt" -Raw }
+            $casos += [pscustomobject]@{ n=$n; rc=$rc; verificacion=($rc -eq 0); salida=$sal }
+          }
+          [pscustomobject]@{ casos=$casos } | ConvertTo-Json -Depth 4 | Set-Content firmas.json -Encoding utf8
+          Get-Content firmas.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: srank-firmas
+          path: firmas.json
+          if-no-files-found: error
