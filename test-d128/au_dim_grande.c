@@ -13,6 +13,7 @@
 
 #include "fastrandombytes.h"
 #include "gentdrow.h"
+#include "hash.h"
 #include "keygen.h"
 #include "mint.h"
 #include "param.h"
@@ -163,6 +164,96 @@ static int selftest_sub_vs_dense(void) {
   return 0;
 }
 
+/* Condiciones de la canonicalizacion del challenge (Fiat-Shamir):
+ *   1) mismo elemento en ambos dominios -> mismos coeficientes
+ *   2) mismo polinomio -> mismo challenge
+ *   3) polinomio distinto -> challenge distinto
+ *   4) parametros distintos -> transcripcion distinta
+ */
+static int test_canonical(void) {
+  static POLY_QBIG coef, pd, ps, aD[N_HAT], aS[N_HAT], bD[N_HAT], bS[N_HAT];
+  static POLY_Q x1, x2, x3, x4;
+  static POLY_Q c[N], d[N], f0[M], sd[N];
+  static POLY_Q e0[M][N], gout[M][N];
+  uint64_t i, j;
+
+  memset(c, 0, sizeof(c)); memset(d, 0, sizeof(d));
+  memset(f0, 0, sizeof(f0)); memset(sd, 0, sizeof(sd));
+  memset(e0, 0, sizeof(e0)); memset(gout, 0, sizeof(gout));
+
+  /* 1) un mismo elemento del anillo se codifica igual en ambos modos */
+  for (i = 0; i < D; i++) {
+    coef.poly1[i] = (i * 12345ULL + 7ULL) % QBIG1;
+    coef.poly2[i] = (i * 54321ULL + 9ULL) % QBIG2;
+  }
+  pd = coef; ntt_qbig_dense(&pd); intt_qbig_dense(&pd);
+  ps = coef; ntt_qbig_sub(&ps); intt_qbig_sub(&ps);
+  for (i = 0; i < D; i++) {
+    if (pd.poly1[i] != ps.poly1[i] || pd.poly1[i] != coef.poly1[i] ||
+        pd.poly2[i] != ps.poly2[i] || pd.poly2[i] != coef.poly2[i]) {
+      printf("canonical: coeficientes discrepancies en %llu\n",
+             (unsigned long long)i);
+      return 1;
+    }
+  }
+  printf("canonical: denso == subanillo == coeficientes: OK\n");
+
+  /* armar a,b como elementos任意一个 de los dos dominios */
+  for (i = 0; i < N_HAT; i++) {
+    for (j = 0; j < D; j++) {
+      coef.poly1[j] = (i * 7919ULL + j * 104729ULL + 11ULL) % QBIG1;
+      coef.poly2[j] = (i * 6151ULL + j * 15485863ULL + 13ULL) % QBIG2;
+    }
+    aD[i] = coef; ntt_qbig_dense(aD + i);
+    aS[i] = coef; ntt_qbig_sub(aS + i);
+    for (j = 0; j < D; j++) {
+      coef.poly1[j] = (i * 1299709ULL + j * 1543ULL + 17ULL) % QBIG1;
+      coef.poly2[j] = (i * 1299721ULL + j * 2011ULL + 19ULL) % QBIG2;
+    }
+    bD[i] = coef; ntt_qbig_dense(bD + i);
+    bS[i] = coef; ntt_qbig_sub(bS + i);
+  }
+
+  qbig_mode = 0;
+  hash(&x1, aD, bD, c, d, e0, f0, gout, sd, a_in, pk_out, cn_out);
+  qbig_mode = 1;
+  hash(&x2, aS, bS, c, d, e0, f0, gout, sd, a_in, pk_out, cn_out);
+  for (i = 0; i < D; i++) {
+    if (x1.poly[i] != x2.poly[i]) {
+      printf("canonical: mismo polinomio dio challenge distinto en %llu\n",
+             (unsigned long long)i);
+      return 1;
+    }
+  }
+  printf("canonical: mismo polinomio -> mismo challenge: OK\n");
+
+  /* 3) cambiar un coeficiente -> challenge distinto */
+  bD[0].poly1[0] = (bD[0].poly1[0] + 1) % QBIG1;
+  qbig_mode = 0;
+  hash(&x3, aD, bD, c, d, e0, f0, gout, sd, a_in, pk_out, cn_out);
+  for (i = 0; i < D; i++) {
+    if (x3.poly[i] != x1.poly[i]) break;
+  }
+  if (i == D) {
+    printf("canonical: polinomio distinto NO cambio el challenge\n");
+    return 1;
+  }
+  printf("canonical: polinomio distinto -> challenge distinto: OK\n");
+
+  /* 4) cambiar un parametro publico -> transcripcion distinta */
+  gout[0].poly[0] = (gout[0].poly[0] + 1) % Q;
+  hash(&x4, aD, bD, c, d, e0, f0, gout, sd, a_in, pk_out, cn_out);
+  for (i = 0; i < D; i++) {
+    if (x4.poly[i] != x3.poly[i]) break;
+  }
+  if (i == D) {
+    printf("canonical: parametro distinto NO cambio el challenge\n");
+    return 1;
+  }
+  printf("canonical: parametro distinto -> transcripcion distinta: OK\n");
+  return 0;
+}
+
 static void conv_d2s(POLY_QBIG *p, uint64_t n) {
   uint64_t i;
   for (i = 0; i < n; i++) {
@@ -205,6 +296,8 @@ int main(void) {
 
   if (selftest_qbig() || selftest_rq() || selftest_sub_vs_dense())
     return 2;
+  if (test_canonical())
+    return 4;
 
   srand(20261126);
   randombytes(seed, CRYPTO_BYTES);
