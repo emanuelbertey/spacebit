@@ -1,0 +1,40 @@
+name: Comparacion controlada A/B/C/D (SIS)
+
+# Manual. Separa el efecto de los parametros del efecto del optimizador:
+#   A = MatRiCT+ originales, busqueda fina
+#   B = Au256 actuales, busqueda fina
+#   C = Au256 actuales, busqueda gruesa
+#   D = MatRiCT+ originales, busqueda gruesa
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  comparar:
+    name: A/B/C/D
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr comparacion
+        shell: bash
+        run: |
+          set +e
+          python security/compare_abcd.py 2>&1 | tee compare_abcd.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: comparacion-abcd
+          path: |
+            security/compare_abcd.json
+            compare_abcd.log
+          if-no-files-found: warn
