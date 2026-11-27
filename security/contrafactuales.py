@@ -11,7 +11,6 @@ Todos con busqueda gruesa (40/10/10) para que el optimizador pueda ver BKZ chico
 import json
 import math
 import pathlib
-import signal
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -74,17 +73,8 @@ def geometria(p, v, w, b):
             "l_menor_q": int(l < q), "c12_15": [round(x, 3) for x in c]}
 
 
-class Timeout(Exception):
-    pass
-
-
-def _alarm(signum, frame):
-    raise Timeout()
-
-
 def main():
     sis.MIN_b, sis.STEPS_b, sis.STEPS_m = 40, 10, 10
-    signal.signal(signal.SIGALRM, _alarm)
     out = {"config": "gruesa 40/10/10", "nota": "min coste entre variantes con l<q",
            "escenarios": {}}
     for nombre, p in ESCENARIOS.items():
@@ -93,7 +83,6 @@ def main():
         h = D * s
         filas = []
         for v in (0, 1, 2):
-            signal.alarm(90)
             try:
                 params = sis.MSISParameterSet(D, sum(m), s, B[0], B[1], B[2],
                                               B[3], B[4], m[0], m[1], m[2],
@@ -108,8 +97,6 @@ def main():
                          valido=g["l_menor_q"])
             except Exception as exc:
                 g = {"variante": v, "error": f"{type(exc).__name__}: {exc}"}
-            finally:
-                signal.alarm(0)
             filas.append(g)
         validos = [f["cost_bits"] for f in filas
                    if f.get("valido") and "cost_bits" in f]
