@@ -73,7 +73,12 @@ def main():
         for nombre_est, mod in (("original_paper", orig), ("nuestro_modificado", ours)):
             for nombre_cfg, cfg in configs.items():
                 for variante in (0, 1, 2):
-                    r = correr(mod, q, variante, cfg)
+                    try:
+                        r = correr(mod, q, variante, cfg)
+                    except Exception as exc:
+                        r = {"dim_sis": None, "bkz": None, "rhf": None,
+                             "cost_bits": None,
+                             "error": f"{type(exc).__name__}: {exc}"}
                     r.update(modulo=nombre_mod, estimador=nombre_est,
                              config=nombre_cfg, variante=variante)
                     report["corridas"].append(r)

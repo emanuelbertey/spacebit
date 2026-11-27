@@ -20,7 +20,19 @@ jobs:
         with:
           python-version: '3.11'
       - name: Correr reproduccion
-        run: python security/paper_repro.py
+        shell: bash
+        run: |
+          set +e
+          python security/paper_repro.py 2>&1 | tee paper_repro.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-repro-log
+          path: paper_repro.log
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always()
         with:
