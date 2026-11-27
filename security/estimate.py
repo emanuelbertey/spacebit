@@ -94,7 +94,9 @@ def main():
                               B1, B2, B3, B4, B5, m1, m2, m3, m4, m5,
                               q, norm="linf")
     results, elapsed, error = estimate(params, seconds=900)
-    report = {"scheme": scheme, "nota": nota, "log2_q": round(math.log2(q), 2),
+    report = {"scheme": scheme, "baseline": ("Au256-baseline" if scheme == "au256"
+                                             else None),
+              "nota": nota, "log2_q": round(math.log2(q), 2),
               "d": d, "bounds_log2": [round(math.log2(b), 2)
                                       for b in (B1, B2, B3, B4, B5)],
               "results": results, "segundos": round(elapsed, 1), "error": error}

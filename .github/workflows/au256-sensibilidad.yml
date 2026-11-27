@@ -1,0 +1,29 @@
+name: Au256-baseline - sensibilidad MSIS
+
+# Manual. No cambia parametros funcionales: solo mide en el MODELO cual cota
+# limita el cost_pq del Au256-baseline (37-42 bits).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sensibilidad:
+    name: Sensibilidad de cotas
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr sensibilidad
+        run: python security/sensitivity.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au256-sensibilidad
+          path: security/sensitivity_au256.json
+          if-no-files-found: error
