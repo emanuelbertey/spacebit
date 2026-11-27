@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "audit.h"
 #include "fastrandombytes.h"
 #include "gentdrow.h"
 #include "keygen.h"
@@ -28,7 +29,7 @@ static ACT a_in[N_SPENT];
 static ASK ask;
 
 int main(void) {
-  uint64_t i, l, amt, v, amt_out[S];
+  uint64_t i, l, amt, v, amt_out[S], l_au, amt_out_au[S], aud_ok;
   clock_t c0, c1, c2;
 
   qbig_mode = 1;  /* solo subanillos */
@@ -80,8 +81,16 @@ int main(void) {
          (double)(c2 - c1) / CLOCKS_PER_SEC);
   printf("verificacion: %s (v=%llu)\n", v ? "OK" : "FALLA",
          (unsigned long long)v);
+
+  /* auditoria Au: recupera el firmante y los montos desde g_hat y td */
+  audit(&l_au, amt_out_au, &out, g_hat, td);
+  aud_ok = (l_au == l) && (amt_out_au[0] == amt_out[0]) &&
+           (amt_out_au[1] == amt_out[1]);
+  printf("auditoria (llave/montos): %s (l_au=%llu, pago_au=%llu/%llu)\n",
+         aud_ok ? "OK" : "FALLA", (unsigned long long)l_au,
+         (unsigned long long)amt_out_au[0], (unsigned long long)amt_out_au[1]);
   printf("pago=%llu/%llu\n", (unsigned long long)amt_out[0],
          (unsigned long long)amt_out[1]);
   fflush(stdout);
-  return v ? 0 : 1;
+  return (v && aud_ok) ? 0 : 1;
 }
