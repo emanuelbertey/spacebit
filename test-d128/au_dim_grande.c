@@ -131,6 +131,20 @@ static int selftest_sub_vs_dense(void) {
   mult_rqbig_dense(&d1, &d1, &d2);
   intt_qbig_dense(&d1);
 
+  /* primero: el roundtrip del modo subanillo debe ser identidad */
+  s1 = a;
+  ntt_qbig_sub(&s1);
+  intt_qbig_sub(&s1);
+  for (i = 0; i < D; i++) {
+    if (s1.poly1[i] != a.poly1[i] || s1.poly2[i] != a.poly2[i]) {
+      printf("sub roundtrip: FALLA en %llu (%llu vs %llu)\n",
+             (unsigned long long)i, (unsigned long long)s1.poly1[i],
+             (unsigned long long)a.poly1[i]);
+      return 1;
+    }
+  }
+  printf("sub roundtrip: OK\n");
+
   s1 = a; s2 = b;
   ntt_qbig_sub(&s1); ntt_qbig_sub(&s2);
   mult_rqbig_sub(&s1, &s1, &s2);
