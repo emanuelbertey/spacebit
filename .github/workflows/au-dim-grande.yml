@@ -134,8 +134,12 @@ jobs:
 
       - name: Compilar Au D=128
         run: |
+          set +e
           bash test/build/build.sh "$PWD/auditor_d128" \
-            "$PWD/test-d128/au_dim_grande.c" au_d128.exe -Wl,--stack,134217728
+            "$PWD/test-d128/au_dim_grande.c" au_d128.exe -Wl,--stack,134217728 2>&1 | tee compile_d128.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
 
       - name: Correr prueba (D=128)
         if: always()
@@ -147,6 +151,13 @@ jobs:
           echo "$rc" > "$PWD/rc_d128.txt"
           cat "$PWD/salida_d128.txt"
           exit 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-d128-compile-log
+          path: compile_d128.log
+          if-no-files-found: warn
 
       - name: Armar JSON del resultado
         if: always()
