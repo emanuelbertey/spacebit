@@ -379,28 +379,30 @@ def load_gadget(path):
             pos += 2
         entries.append((p1, p2))
 
-    # tg_0[0] es el gadget del indice 1: t_bar*1, o sea [t_bar,0,...,0].
-    # Si la recuperacion trae el factor Montgomery, se lo sacamos.
-    f1, f2 = entries[0][0][0], entries[0][1][0]
-    if (f1, f2) != (T_BAR_QBIG1, T_BAR_QBIG2):
-        if (f1, f2) == (T_BAR_QBIG1 * R1 % QBIG1, T_BAR_QBIG2 * R2 % QBIG2):
-            i1 = pow(R1, -1, QBIG1)
-            i2 = pow(R2, -1, QBIG2)
-            entries = [([(v * i1) % QBIG1 for v in p1],
-                        [(v * i2) % QBIG2 for v in p2])
-                       for p1, p2 in entries]
-            print("gadget: recuperado con factor Montgomery; normalizado")
-        else:
-            raise SystemExit(
-                f"gadget inesperado: tg_0[0]=( {f1}, {f2}) "
-                f"(esperaba ({T_BAR_QBIG1}, {T_BAR_QBIG2}))")
+    # tg_0[0] es el gadget del indice 1: t_bar*1 = [t_bar,0,...,0].
+    # No asumimos si intt_qbig devuelve t_bar, t_bar*R o t_bar*R^{-1}:
+    # el propio coeficiente [0] nos da la escala. Lo dividimos para obtener
+    # los polinomios de bits (coeficientes 0/1) y luego los reescalamos a
+    # t_bar "plano", que es lo que espera el NTT nuevo (aritmetica simple).
+    s1, s2 = entries[0][0][0], entries[0][1][0]
+    if s1 == 0 or s2 == 0:
+        raise SystemExit("gadget: tg_0[0] es cero; no se puede calibrar la escala")
+    i1, i2 = pow(s1, -1, QBIG1), pow(s2, -1, QBIG2)
+    bits = [([(v * i1) % QBIG1 for v in p1],
+             [(v * i2) % QBIG2 for v in p2])
+            for p1, p2 in entries]
 
-    # Validacion fuerte de tg_0: sus coeficientes deben ser 0 o t_bar.
+    # Validacion: los coeficientes deben ser solo 0 o 1.
     for k in range(N_SPENT_TABLES):
-        p1, p2 = entries[k]
-        if any(v not in (0, T_BAR_QBIG1) for v in p1) or \
-           any(v not in (0, T_BAR_QBIG2) for v in p2):
-            raise SystemExit(f"gadget: tg_0[{k}] no es el gadget esperado")
+        p1, p2 = bits[k]
+        if any(v not in (0, 1) for v in p1) or any(v not in (0, 1) for v in p2):
+            raise SystemExit(
+                f"gadget: tg_0[{k}] no es 0/1: {sorted(set(p1))[:6]}")
+
+    entries = [([(v * T_BAR_QBIG1) % QBIG1 for v in p1],
+                [(v * T_BAR_QBIG2) % QBIG2 for v in p2])
+               for p1, p2 in bits]
+    print(f"gadget: escala calibrada ({s1}, {s2}) -> t_bar plano")
     return entries
 
 

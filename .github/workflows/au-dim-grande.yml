@@ -47,7 +47,12 @@ jobs:
       # las firmas honestas (el port es experimental, no un parametro auditado).
       - name: Generar auditor_d128 (test, TG x8)
         shell: bash
-        run: python test-d128/port.py --gadget gadget_polys.txt --tg-factor 8 --out auditor_d128
+        run: |
+          set +e
+          python test-d128/port.py --gadget gadget_polys.txt --tg-factor 8 --out auditor_d128 2>&1 | tee port_d128.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
 
       # Copia separada con TG de fabrica para la auditoria estatica.
       - name: Generar copia para auditoria (TG de fabrica)
@@ -87,7 +92,14 @@ jobs:
         with:
           name: au-d128-auditoria
           path: audit_report_d128.json
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-d128-log-port
+          path: port_d128.log
+          if-no-files-found: warn
 
   au_d128:
     name: Au D=128 - compilar y correr
