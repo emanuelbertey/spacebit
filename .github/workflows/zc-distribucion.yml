@@ -1,0 +1,68 @@
+name: z_c real - distribucion vs BBIG
+
+# Manual. Mide la distribucion REAL de z_c en el Au portado a D=128 y la
+# compara con ZC_NORM = BBIG - 448. No modifica parametros funcionales.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portar:
+    name: Generar fuentes Au D=128
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Recuperar gadget D=64
+        shell: bash
+        run: |
+          SKIP_EXTRA=gentdrow.c bash test/build/build.sh \
+            auditor "$PWD/test-d128/recover_gadget.c" recover_gadget.exe
+          ./artifacts/recover_gadget.exe > gadget_polys.txt
+          wc -l gadget_polys.txt
+      - name: Generar auditor_d128
+        shell: bash
+        run: python test-d128/port.py --gadget gadget_polys.txt --tg-factor 8 --out auditor_d128
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zc-fuentes
+          path: auditor_d128
+          if-no-files-found: error
+
+  medir:
+    name: Medir z_c
+    needs: portar
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+      - uses: actions/download-artifact@v4
+        with:
+          name: zc-fuentes
+          path: auditor_d128
+      - name: Compilar y correr
+        run: |
+          bash test/build/build.sh "$PWD/auditor_d128" \
+            "$PWD/test-d128/zc_stats.c" zc_stats.exe -Wl,--stack,134217728
+          "$PWD/artifacts/zc_stats.exe" > "$PWD/zc_stats.json" 2>&1
+          cat "$PWD/zc_stats.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zc-distribucion
+          path: zc_stats.json
+          if-no-files-found: error
