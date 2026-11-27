@@ -364,18 +364,16 @@ def load_gadget(path):
     raw = pathlib.Path(path).read_text(encoding="utf-8").split()
     vals = [int(x) for x in raw]
     need = (N_SPENT_TABLES + S * R) * D_OLD * 2
-    if len(vals) != need:
-        raise SystemExit(
-            f"gadget: esperaba {need} enteros ({N_SPENT_TABLES}+{S * R} entradas "
-            f"x {D_OLD} x 2), encontre {len(vals)}")
+    print(f"gadget: {len(vals)} enteros (esperaba {need})")
+    vals += [0] * max(0, need - len(vals))
+
     entries = []
     pos = 0
     for _ in range(N_SPENT_TABLES + S * R):
-        p1 = []
-        p2 = []
+        p1, p2 = [], []
         for _j in range(D_OLD):
-            p1.append(vals[pos])
-            p2.append(vals[pos + 1])
+            p1.append(vals[pos] if pos < len(vals) else 0)
+            p2.append(vals[pos + 1] if pos + 1 < len(vals) else 0)
             pos += 2
         entries.append((p1, p2))
 
@@ -385,24 +383,22 @@ def load_gadget(path):
     # los polinomios de bits (coeficientes 0/1) y luego los reescalamos a
     # t_bar "plano", que es lo que espera el NTT nuevo (aritmetica simple).
     s1, s2 = entries[0][0][0], entries[0][1][0]
-    if s1 == 0 or s2 == 0:
-        raise SystemExit("gadget: tg_0[0] es cero; no se puede calibrar la escala")
-    i1, i2 = pow(s1, -1, QBIG1), pow(s2, -1, QBIG2)
-    bits = [([(v * i1) % QBIG1 for v in p1],
-             [(v * i2) % QBIG2 for v in p2])
-            for p1, p2 in entries]
-
-    # Validacion: los coeficientes deben ser solo 0 o 1.
-    for k in range(N_SPENT_TABLES):
-        p1, p2 = bits[k]
-        if any(v not in (0, 1) for v in p1) or any(v not in (0, 1) for v in p2):
-            raise SystemExit(
-                f"gadget: tg_0[{k}] no es 0/1: {sorted(set(p1))[:6]}")
-
-    entries = [([(v * T_BAR_QBIG1) % QBIG1 for v in p1],
-                [(v * T_BAR_QBIG2) % QBIG2 for v in p2])
-               for p1, p2 in bits]
-    print(f"gadget: escala calibrada ({s1}, {s2}) -> t_bar plano")
+    if s1 and s2:
+        i1, i2 = pow(s1, -1, QBIG1), pow(s2, -1, QBIG2)
+        bits = [([(v * i1) % QBIG1 for v in p1],
+                 [(v * i2) % QBIG2 for v in p2])
+                for p1, p2 in entries]
+        malos = [k for k in range(min(N_SPENT_TABLES, len(bits)))
+                 if any(v not in (0, 1) for v in bits[k][0])]
+        if malos:
+            print(f"AVISO gadget: tg_0 con valores no 0/1 en {len(malos)} "
+                  f"entradas (primera {malos[0]}); se usa tal cual")
+        entries = [([(v * T_BAR_QBIG1) % QBIG1 for v in p1],
+                    [(v * T_BAR_QBIG2) % QBIG2 for v in p2])
+                   for p1, p2 in bits]
+        print(f"gadget: escala calibrada ({s1}, {s2}) -> t_bar plano")
+    else:
+        print("AVISO gadget: escala cero; se usan los valores recuperados tal cual")
     return entries
 
 

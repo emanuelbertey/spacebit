@@ -121,7 +121,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: au-d128-fuentes
-          path: .
+          path: auditor_d128
 
       - name: Verificar fuentes portadas
         run: |
