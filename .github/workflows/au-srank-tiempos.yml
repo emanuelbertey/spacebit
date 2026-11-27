@@ -71,14 +71,14 @@ jobs:
           SKIP_EXTRA=gentdrow.c bash test/build/build.sh \
             auditor "$PWD/test-d128/recover_gadget.c" recover_gadget.exe
           ./artifacts/recover_gadget.exe > gadget_polys.txt
-          python test-d128/port.py --gadget gadget_polys.txt --tg-factor 8 --out auditor_d128
+          python test-d128/port.py --dim 256 --gadget gadget_polys.txt --tg-factor 8 --out auditor_d256
       - name: Correr firmas
         run: |
           set -e
           for n in 10 30 50; do
             echo "=== N=$n ==="
-            bash test/build/build.sh "$PWD/auditor_d128" \
-              "$PWD/test-d128/au_dim_grande.c" "firma_$n.exe" \
+            bash test/build/build.sh "$PWD/auditor_d256" \
+              "$PWD/test-d128/au_d256_sign.c" "firma_$n.exe" \
               -DBETA=$n -Wl,--stack,134217728
             set +e
             "$PWD/artifacts/firma_$n.exe" > "$PWD/out_$n.txt" 2>&1

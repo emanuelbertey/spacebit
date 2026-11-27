@@ -581,13 +581,46 @@ def load_gadget(path):
 N_SPENT_TABLES = BETA - 1  # tg_0 tiene N_SPENT-1 entradas
 
 
+def ntt_py_sub(a, q, eta):
+    """NTT por bloques (K=D/4) igual que poly_qbig_sub.c.
+    Necesario para D=256, donde no existe raiz de orden 2D en QBIG2."""
+    K = D >> 2
+    zeta = eta * eta % q
+    out = [0] * D
+    for r in range(4):
+        pw = 1
+        tmp = []
+        for qi in range(K):
+            tmp.append(a[qi * 4 + r] % q * pw % q)
+            pw = pw * eta % q
+        bitrev(tmp)
+        length = 2
+        while length <= K:
+            wl = pow(zeta, K // length, q)
+            for i in range(0, K, length):
+                ww = 1
+                for j in range(length // 2):
+                    u = tmp[i + j]
+                    v = tmp[i + j + length // 2] * ww % q
+                    tmp[i + j] = (u + v) % q
+                    tmp[i + j + length // 2] = (u - v) % q
+                    ww = ww * wl % q
+            length <<= 1
+        for i in range(K):
+            out[r * K + i] = tmp[i]
+    return out
+
+
 def main():
+    global D
     ap = argparse.ArgumentParser()
+    ap.add_argument("--dim", type=int, default=128)
     ap.add_argument("--out", default="auditor_d128")
     ap.add_argument("--gadget", default=None,
                     help="gadget_polys.txt recuperado con el codigo original D=64")
     ap.add_argument("--tg-factor", type=int, default=1)
     args = ap.parse_args()
+    D = args.dim
 
     dst = ROOT / args.out
     if dst.exists():
@@ -701,13 +734,20 @@ def main():
     # 7) tablas del gadget (si se recuperaron)
     if args.gadget:
         entries = load_gadget(args.gadget)
-        psi1 = root_2d(QBIG1, D)
-        psi2 = root_2d(QBIG2, D)
         tg0 = []
         tg1 = []
+        if D > 128:
+            # modo bloques: raiz de orden 2*(D/4), existe en ambos modulos
+            psi1 = root_2d(QBIG1, 2 * (D >> 2))
+            psi2 = root_2d(QBIG2, 2 * (D >> 2))
+            conv = ntt_py_sub
+        else:
+            psi1 = root_2d(QBIG1, D)
+            psi2 = root_2d(QBIG2, D)
+            conv = ntt_py
         for idx, (p1, p2) in enumerate(entries):
-            e1 = ntt_py(list(p1) + [0] * (D - D_OLD), QBIG1, psi1)
-            e2 = ntt_py(list(p2) + [0] * (D - D_OLD), QBIG2, psi2)
+            e1 = conv(list(p1) + [0] * (D - D_OLD), QBIG1, psi1)
+            e2 = conv(list(p2) + [0] * (D - D_OLD), QBIG2, psi2)
             if idx < N_SPENT_TABLES:
                 tg0.append((e1, e2))
             else:
