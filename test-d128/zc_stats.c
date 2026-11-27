@@ -82,8 +82,9 @@ int main(void) {
 
     for (i = 0; i < M; i++) {
       for (j = 0; j < D; j++) {
+        /* zc se guarda como int64 con signo (complemento a dos), no mod Q */
         v = out.zc[i].poly[j];
-        absv = (v <= (uint64_t)Q / 2) ? v : (uint64_t)Q - v;
+        absv = (v <= (uint64_t)INT64_MAX) ? v : (uint64_t)(-(int64_t)v);
         muestras[pos++] = absv;
         if (absv > max) max = absv;
         if (absv > (uint64_t)ZC_NORM) sobre++;
