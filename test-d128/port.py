@@ -612,16 +612,19 @@ def ntt_py_sub(a, q, eta):
 
 
 def main():
-    global D
+    global D, M
     ap = argparse.ArgumentParser()
     ap.add_argument("--dim", type=int, default=128)
     ap.add_argument("--n-spent", type=int, default=100)
+    ap.add_argument("--M", type=int, default=None)
     ap.add_argument("--out", default="auditor_d128")
     ap.add_argument("--gadget", default=None,
                     help="gadget_polys.txt recuperado con el codigo original D=64")
     ap.add_argument("--tg-factor", type=int, default=1)
     args = ap.parse_args()
     D = args.dim
+    if args.M is not None:
+        M = args.M
 
     dst = ROOT / args.out
     if dst.exists():
@@ -633,7 +636,15 @@ def main():
     t = p.read_text(encoding="utf-8")
     t, cnt = re.subn(r"#define\s+D\s+64LL", "#define D %dLL" % D, t, count=1)
     if cnt != 1:
-        raise SystemExit("no pude fijar D=128 en poly_param.h")
+        raise SystemExit("no pude fijar D en poly_param.h")
+    p.write_text(t, encoding="utf-8")
+
+    # M del esquema (rango funcional)
+    p = dst / "param.h"
+    t = p.read_text(encoding="utf-8")
+    t, cnt = re.subn(r"(#define\s+M\s+)38LL", r"\g<1>%dLL" % M, t, count=1)
+    if cnt != 1:
+        raise SystemExit("no pude fijar M en param.h")
     p.write_text(t, encoding="utf-8")
 
     # 2) tamanos dependientes de D
