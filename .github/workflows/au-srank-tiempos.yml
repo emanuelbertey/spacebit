@@ -64,7 +64,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: mingw-w64-x86_64-gcc
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-python
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -84,6 +84,7 @@ jobs:
           set -e
           exit $rc
       - name: Correr firmas
+        shell: bash
         run: |
           set +e
           for rank in 2 3 4; do
