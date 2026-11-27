@@ -1,0 +1,30 @@
+name: Au256-baseline - auditoria del estimador
+
+# Manual. No cambia parametros funcionales. Verifica monotonía de cotas,
+# corre los 3 modelos SVP y las 3 variantes de ataque, y compara la busqueda
+# actual con la del paper.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Auditoria del estimador MSIS
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr auditoria del estimador
+        run: python security/estimate_audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au256-estimador-audit
+          path: security/estimate_audit.json
+          if-no-files-found: error
