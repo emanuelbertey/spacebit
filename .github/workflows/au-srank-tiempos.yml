@@ -34,11 +34,12 @@ jobs:
           set +e
           for rank in 2 3 4; do
             M=$((19 * rank))
+            TG=$((1 << (rank - 1)))
             for n in 10 30; do
               tag="r${rank}_n${n}"
               echo "=== rank=$rank M=$M N=$n ==="
               python test-d128/port.py --dim 256 --n-spent $n --M $M \
-                --gadget gadget_polys.txt --tg-factor 8 \
+                --gadget gadget_polys.txt --tg-factor $TG \
                 --out "src_$tag" 2>&1 | tee "gen_$tag.log"
               bash test/build/build.sh "$PWD/src_$tag" \
                 "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
@@ -115,6 +116,7 @@ jobs:
           set +e
           rank=5
           M=$((19 * rank))
+          TG=$((1 << (rank - 1)))
           n=10
           tag="r${rank}_n${n}"
           echo "=== rank=$rank M=$M N=$n ==="
