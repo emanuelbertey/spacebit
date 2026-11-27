@@ -85,7 +85,7 @@ jobs:
               --gadget gadget_polys.txt --tg-factor 8 --out "auditor_d256_$n"
             bash test/build/build.sh "$PWD/auditor_d256_$n" \
               "$PWD/test-d128/au_d256_sign.c" "firma_$n.exe" \
-              -DBETA=$n -Wl,--stack,134217728
+              -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$n.log"
             brc=$?
             if [ "$brc" -ne 0 ]; then
               echo "$brc" > "$PWD/rc_$n.txt"
@@ -124,6 +124,9 @@ jobs:
           name: srank-log
           path: |
             fuentes.log
+            build_10.log
+            build_30.log
+            build_50.log
             out_10.txt
             out_30.txt
             out_50.txt
