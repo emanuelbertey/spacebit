@@ -364,37 +364,41 @@ static void ct_core_s(uint64_t *a, uint64_t q, uint64_t w, uint64_t n) {
   }
 }
 
+/* Ojo: no se puede escribir en `a` mientras se siguen leyendo los demas
+ * residuos r (los indices qi*SUB_S+r se pisan). Se guarda todo en `buf`. */
 static void ntt_sub_core(uint64_t *a, uint64_t q, uint64_t eta) {
-  uint64_t tmp[SUB_K];
+  uint64_t buf[SUB_S][SUB_K];
   uint64_t zeta = eta * eta % q;
   uint64_t r, qi, i, pw;
   for (r = 0; r < SUB_S; r++) {
     pw = 1;
     for (qi = 0; qi < SUB_K; qi++) {
-      tmp[qi] = (a[qi * SUB_S + r] % q) * pw % q;
+      buf[r][qi] = (a[qi * SUB_S + r] % q) * pw % q;
       pw = pw * eta % q;
     }
-    ct_core_s(tmp, q, zeta, SUB_K);
-    for (i = 0; i < SUB_K; i++) a[r * SUB_K + i] = tmp[i];
+    ct_core_s(buf[r], q, zeta, SUB_K);
   }
+  for (r = 0; r < SUB_S; r++)
+    for (i = 0; i < SUB_K; i++) a[r * SUB_K + i] = buf[r][i];
 }
 
 static void intt_sub_core(uint64_t *a, uint64_t q, uint64_t eta) {
-  uint64_t tmp[SUB_K];
+  uint64_t buf[SUB_S][SUB_K];
   uint64_t zeta_inv = mpow_s(eta * eta % q, q - 2, q);
   uint64_t eta_inv = mpow_s(eta, q - 2, q);
   uint64_t kinv = mpow_s(SUB_K, q - 2, q);
   uint64_t r, qi, i, pw;
   for (r = 0; r < SUB_S; r++) {
-    for (i = 0; i < SUB_K; i++) tmp[i] = a[r * SUB_K + i] % q;
-    ct_core_s(tmp, q, zeta_inv, SUB_K);
+    for (i = 0; i < SUB_K; i++) buf[r][i] = a[r * SUB_K + i] % q;
+    ct_core_s(buf[r], q, zeta_inv, SUB_K);
     pw = 1;
     for (qi = 0; qi < SUB_K; qi++) {
-      tmp[qi] = tmp[qi] * kinv % q * pw % q;
+      buf[r][qi] = buf[r][qi] * kinv % q * pw % q;
       pw = pw * eta_inv % q;
     }
-    for (qi = 0; qi < SUB_K; qi++) a[qi * SUB_S + r] = tmp[qi];
   }
+  for (r = 0; r < SUB_S; r++)
+    for (qi = 0; qi < SUB_K; qi++) a[qi * SUB_S + r] = buf[r][qi];
 }
 
 static void mult_sub_core(uint64_t *out, const uint64_t *a, const uint64_t *b,
