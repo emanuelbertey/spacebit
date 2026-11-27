@@ -1,0 +1,29 @@
+name: Reproduccion estimador paper MatRiCT+
+
+# Manual. Compara el estimador original del paper (ASIS_est.sage) con nuestro
+# estimador modificado, usando los parametros publicados y ambos moduli.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    name: Reproducir ASIS_est.sage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr reproduccion
+        run: python security/paper_repro.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-repro
+          path: security/paper_repro.json
+          if-no-files-found: error
