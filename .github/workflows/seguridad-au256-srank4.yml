@@ -1,0 +1,34 @@
+name: Auditoria de seguridad Au256 (srank=4)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seguridad:
+    name: 3 algoritmos de ataque
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr auditoria de seguridad
+        shell: bash
+        run: |
+          set +e
+          python security/auditoria_seguridad_au256.py 2>&1 | tee seguridad_au256.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seguridad-au256-srank4
+          path: |
+            security/auditoria_seguridad_au256.json
+            seguridad_au256.log
+          if-no-files-found: warn
