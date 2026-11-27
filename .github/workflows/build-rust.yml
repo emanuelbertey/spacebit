@@ -1,8 +1,6 @@
 name: Compilar Rust (solo build, sin ejecutar tests)
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:

@@ -1,8 +1,6 @@
 name: Seguridad (estimacion + auditoria)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

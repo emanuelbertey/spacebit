@@ -68,20 +68,24 @@ def main():
                               int(2**19.92), int(2**16.6))
         m1, m2, m3, m4, m5 = 1, N + 1, sisrank + lwerank, 1, N + 1
         nota = "parametros publicados MatRiCT+ (paper IEEE S&P 2022)"
-    elif scheme == "au":
+    elif scheme in ("au", "au256"):
         # Derivado de auditor/param.h: B1=ZB_NORM, B2=ZC_NORM, B3=BRP,
         # B4=BAP, B5=BA (cotas del verificador). Aproximado, no del paper.
+        # au256 usa las MISMAS cotas pero con D=256 (anillo de auditor
+        # portado a bloques). No es una estimacion oficial ni una prueba.
         N, lwerank, sisrank = 2, 1, 2
-        q, d = 2147221513, 64
+        q, d = 2147221513, (64 if scheme == "au" else 256)
         B1, B2 = 63307776 - 448, 5229773 - 448
         B3, B4, B5 = 98304 - 8, 10240 - 8, 10240
         m1, m2, m3, m4, m5 = 1, 3, sisrank + lwerank, 1, 3
-        nota = "APROXIMADO: cotas del codigo Au, no estimacion oficial del paper"
+        nota = ("APROXIMADO: cotas del codigo Au con D=256 (bloques)"
+                if scheme == "au256" else
+                "APROXIMADO: cotas del codigo Au, no estimacion oficial del paper")
     else:
         print("uso: estimate.py [plus|au]")
         return 2
 
-    if scheme == "au":
+    if scheme.startswith("au"):
         sis.MIN_b = 40
         sis.STEPS_b = 10
         sis.STEPS_m = 10

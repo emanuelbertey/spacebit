@@ -9,7 +9,6 @@ name: Plus D=256 - escala 50 a 100
 # Ademas corre la auditoria estatica de parametros (escala BG_0 = 37162531*N/50).
 
 on:
-  push:
   workflow_dispatch:
 
 permissions:
@@ -107,4 +106,22 @@ jobs:
         with:
           name: plus-d256-auditoria
           path: security/audit_report.json
+          if-no-files-found: error
+
+  seguridad_au256:
+    name: Estimacion MSIS del anillo auditor D=256
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Estimar (aproximado, cotas del codigo)
+        run: python security/estimate.py au256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-d256-seguridad
+          path: security/estimate_au256.json
           if-no-files-found: error

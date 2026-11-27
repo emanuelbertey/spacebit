@@ -16,7 +16,6 @@ name: Au D=128 (port real)
 # `auditor/` original NO se modifica en el repo.
 
 on:
-  push:
   workflow_dispatch:
 
 permissions:
