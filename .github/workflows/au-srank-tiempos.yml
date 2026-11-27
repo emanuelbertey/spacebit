@@ -71,7 +71,7 @@ jobs:
           set +e
           SKIP_EXTRA=gentdrow.c bash test/build/build.sh \
             auditor "$PWD/test-d128/recover_gadget.c" recover_gadget.exe 2>&1
-          ./artifacts/recover_gadget.exe > gadget_polys.txt 2>&1
+          ./artifacts/recover_gadget.exe > gadget_polys.txt
           python test-d128/port.py --dim 256 --gadget gadget_polys.txt --tg-factor 8 --out auditor_d256 2>&1 | tee fuentes.log
           rc=${PIPESTATUS[0]}
           set -e
