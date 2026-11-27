@@ -1,0 +1,37 @@
+name: Au64 vs Au256 (mismo esquema)
+
+# Manual. Mismo sisrank/lwerank/n, mismas cotas, mismo optimizador,
+# mismo criterio de validez. Solo cambia D (64 vs 256).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  comparar:
+    name: Au64 vs Au256
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr comparacion
+        shell: bash
+        run: |
+          set +e
+          python security/au64_vs_au256.py 2>&1 | tee au64_vs_au256.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au64-vs-au256
+          path: |
+            security/au64_vs_au256.json
+            au64_vs_au256.log
+          if-no-files-found: warn
