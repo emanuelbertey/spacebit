@@ -273,7 +273,7 @@ static void setup_to_dense(void) {
 
 int main(void) {
   uint64_t i, l, amt, v, amt_out[S];
-  clock_t t0, t1;
+  clock_t ct0, ct1;
 
   printf("=== Au ronda completa, D=%lld (original D=64) ===\n", (long long)D);
   printf("q=%lld  M=%lld  N=%lld  BETA=%lld  W=%lld\n", (long long)Q,
@@ -320,12 +320,12 @@ int main(void) {
     memcpy(pk_out[0] + i, a_in[0].pk[0] + i, sizeof(POLY_Q));
     memcpy(pk_out[1] + i, a_in[1].pk[0] + i, sizeof(POLY_Q));
   }
-  t0 = clock();
+  ct0 = clock();
   spend(cn_out, &s, &out, a_in, l, &ask, pk_out, amt_out, g, h, g_hat, t0, t1,
         t2);
-  t1 = clock();
+  ct1 = clock();
   printf("spend DENSO: %.3f s\n",
-         (double)(t1 - t0) / (double)CLOCKS_PER_SEC);
+         (double)(ct1 - ct0) / (double)CLOCKS_PER_SEC);
   printf("keygen+mint (%lld llaves) + spend en DENSO: OK\n",
          (long long)N_SPENT);
   fflush(stdout);
@@ -348,12 +348,12 @@ int main(void) {
   if (!v) return 3;
 
   /* Ahora firma en subanillo y lo lee el modo denso. */
-  t0 = clock();
+  ct0 = clock();
   spend(cn_out, &s, &out, a_in, l, &ask, pk_out, amt_out, g, h, g_hat, t0, t1,
         t2);
-  t1 = clock();
+  ct1 = clock();
   printf("spend SUBANILLO: %.3f s\n",
-         (double)(t1 - t0) / (double)CLOCKS_PER_SEC);
+         (double)(ct1 - ct0) / (double)CLOCKS_PER_SEC);
   printf("spend en SUBANILLO: OK\n");
   fflush(stdout);
   setup_to_dense();
