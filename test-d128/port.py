@@ -615,6 +615,7 @@ def main():
     global D
     ap = argparse.ArgumentParser()
     ap.add_argument("--dim", type=int, default=128)
+    ap.add_argument("--n-spent", type=int, default=100)
     ap.add_argument("--out", default="auditor_d128")
     ap.add_argument("--gadget", default=None,
                     help="gadget_polys.txt recuperado con el codigo original D=64")
@@ -754,6 +755,7 @@ def main():
                 tg1.append((e1, e2))
         p = dst / "gentdrow.c"
         t = p.read_text(encoding="utf-8")
+        tg0 = tg0[:args.n_spent - 1]
         t = replace_table(
             t, "static const POLY_QBIG tg_0[",
             table_block("static const POLY_QBIG tg_0[N_SPENT - 1] = {", tg0))
