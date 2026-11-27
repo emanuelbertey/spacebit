@@ -1,0 +1,34 @@
+name: Aislar D vs BKZ
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: D vs BKZ y ranks intermedios
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr
+        shell: bash
+        run: |
+          set +e
+          python security/aislar_d_vs_bkz.py 2>&1 | tee aislar_d_vs_bkz.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aislar-d-vs-bkz
+          path: |
+            security/aislar_d_vs_bkz.json
+            aislar_d_vs_bkz.log
+          if-no-files-found: warn
