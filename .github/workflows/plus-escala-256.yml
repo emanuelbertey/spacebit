@@ -1,0 +1,110 @@
+name: Plus D=256 - escala 50 a 100
+
+# Prueba NUEVA, independiente: no toca los workflows existentes.
+# Compila el kernel Plus (D=256, bloques/subanillos; sin modo denso) para
+# N_SPENT = 50,60,70,80,90,100 y comprueba en cada caso:
+#   - que firma (spend)
+#   - que verifica (verify)
+#   - que los montos cuadran (pago + vuelto = entrada)
+# Ademas corre la auditoria estatica de parametros (escala BG_0 = 37162531*N/50).
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plus_kernel:
+    name: Plus D=256 - firmar y verificar
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: Firmar y verificar para N=50..100
+        run: |
+          set -e
+          for n in 50 60 70 80 90 100; do
+            echo "=== N=$n ==="
+            bash test/build/build.sh plus test/plus_escala_256.c "plus_$n.exe" \
+              -DN_SPENT=$n -Wl,--stack,67108864
+            set +e
+            timeout 1800 "$PWD/artifacts/plus_$n.exe" > "$PWD/salida_$n.txt" 2>&1
+            rc=$?
+            set -e
+            echo "$rc" > "$PWD/rc_$n.txt"
+            cat "$PWD/salida_$n.txt"
+          done
+
+      - name: Armar JSON del kernel
+        if: always()
+        shell: pwsh
+        run: |
+          $casos = @()
+          foreach ($n in @(50,60,70,80,90,100)) {
+            $rc = -1
+            if (Test-Path "rc_$n.txt") { $rc = [int]((Get-Content "rc_$n.txt" -Raw).Trim()) }
+            $salida = ""
+            if (Test-Path "salida_$n.txt") { $salida = Get-Content "salida_$n.txt" -Raw }
+            $casos += [pscustomobject]@{
+              n_spent = $n
+              exit_code = $rc
+              verificacion = ($rc -eq 0)
+              salida = $salida
+            }
+          }
+          [pscustomobject]@{
+            esquema = "plus"
+            dim = 256
+            modo = "bloques"
+            casos = $casos
+            todos_ok = (@($casos | Where-Object { -not $_.verificacion }).Count -eq 0)
+          } | ConvertTo-Json -Depth 4 | Set-Content -Path resultado_plus256.json -Encoding utf8
+          Get-Content resultado_plus256.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plus-d256-resultado
+          path: resultado_plus256.json
+          if-no-files-found: error
+
+      - name: Estado final del kernel
+        if: always()
+        shell: pwsh
+        run: |
+          $j = Get-Content resultado_plus256.json -Raw | ConvertFrom-Json
+          if (-not $j.todos_ok) {
+            Write-Error "Plus D=256: algun caso fallo"
+            exit 1
+          }
+          Write-Host "Plus D=256: 50..100 OK"
+
+  auditoria:
+    name: Auditoria de parametros Plus
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Auditar
+        run: python security/audit_config.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plus-d256-auditoria
+          path: security/audit_report.json
+          if-no-files-found: error
