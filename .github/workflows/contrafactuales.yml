@@ -1,0 +1,34 @@
+name: Contrafactuales SIS (Au256)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cf:
+    name: Contrafactuales
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Correr contrafactuales
+        shell: bash
+        run: |
+          set +e
+          python security/contrafactuales.py 2>&1 | tee contrafactuales.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contrafactuales
+          path: |
+            security/contrafactuales.json
+            contrafactuales.log
+          if-no-files-found: warn
