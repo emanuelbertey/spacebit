@@ -28,17 +28,14 @@ def correr(d, s, l, b_fijo=None):
     for v in (0, 1, 2):
         p = sis.MSISParameterSet(d, sum(m), s, *B, *m, Q, norm="linf")
         if b_fijo is None:
-            w, b, c = SIS_optimize_attack(
-                Q, d * sum(m), h, B[0], mm[0], B[1], mm[1], B[2], mm[2],
-                B[3], mm[3], B[4], mm[4], cost_attack=SIS_linf_cost,
-                cost_svp=svp_quantum, verbose=False, attack_variant=v)
+            sis.MIN_b, sis.STEPS_b = 40, 10
         else:
-            b = b_fijo
-            c = sis.SIS_linf_cost(
-                Q, d * sum(m), h, B[0], mm[0], B[1], mm[1], B[2], mm[2],
-                B[3], mm[3], B[4], mm[4], b, cost_svp=svp_quantum,
-                attack_variant=v)
-            w = d * sum(m)
+            # Fijar b PERO dejar que el optimizador elija w.
+            sis.MIN_b, sis.STEPS_b = b_fijo, 1
+        w, b, c = SIS_optimize_attack(
+            Q, d * sum(m), h, B[0], mm[0], B[1], mm[1], B[2], mm[2],
+            B[3], mm[3], B[4], mm[4], cost_attack=SIS_linf_cost,
+            cost_svp=svp_quantum, verbose=False, attack_variant=v)
         if v == 0:
             i, j, Lg = construct_BKZ_shape(Q, w - h, h, b)
         else:
