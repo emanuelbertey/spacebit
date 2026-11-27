@@ -1,8 +1,10 @@
 /* Prueba REAL de Au con D=128 (en vez de 64).
- * Ronda completa: keygen + mint + spend + verify, mas autotests de NTT.
- * NO toca fuentes originales: se compila sobre `auditor_d128/` generado por
- * test-d128/port.py en GitHub Actions.
- * Devuelve 0 si todo verifica, 1 si la ronda falla, 2 si falla un NTT.
+ * Ronda completa + comparacion de dos multiplicaciones en qbig:
+ *   - densa: un NTT de longitud D (la del port original)
+ *   - subanillos (estilo Plus): K bloques de S=4 con NTT de longitud K
+ * Ademas cruza los modos: firma en denso y verifica en subanillos, y viceversa.
+ * Devuelve 0 si todo OK, 1 si la ronda falla, 2 si falla un NTT, 3 si el
+ * cruce de modos falla.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -22,6 +24,14 @@
 #include "spend.h"
 #include "verify.h"
 
+extern uint64_t qbig_mode;
+void ntt_qbig_dense(POLY_QBIG *a);
+void intt_qbig_dense(POLY_QBIG *a);
+void mult_rqbig_dense(POLY_QBIG *out, const POLY_QBIG *a, const POLY_QBIG *b);
+void ntt_qbig_sub(POLY_QBIG *a);
+void intt_qbig_sub(POLY_QBIG *a);
+void mult_rqbig_sub(POLY_QBIG *out, const POLY_QBIG *a, const POLY_QBIG *b);
+
 static unsigned char seed[CRYPTO_BYTES];
 static POLY_Q g[M + R][N], h[M];
 static POLY_QBIG g_hat[M_HAT + V_HAT][N_HAT];
@@ -32,8 +42,9 @@ static POLY_QBIG t0[M_HAT], t1[V_1], t2[V_2], td[N_HAT - 1];
 static ACT a_in[N_SPENT];
 static ASK ask;
 
-/* Comprueba que el NTT de qbig (reemplazado en el port) multiplica bien:
- * compara contra la convolucion negaciclica escolar. */
+#define NHAT_ALL ((M_HAT + V_HAT) * N_HAT)
+
+/* Comprueba que el NTT denso de qbig multiplica bien contra escolar. */
 static int selftest_qbig(void) {
   static POLY_QBIG a, b, c, d, ref;
   uint64_t i, j, k, p1, p2;
@@ -46,11 +57,10 @@ static int selftest_qbig(void) {
     ref.poly1[i] = 0;
     ref.poly2[i] = 0;
   }
-
   for (i = 0; i < D; i++) {
     for (j = 0; j < D; j++) {
-      p1 = (a.poly1[i] * b.poly1[j]) % QBIG1;
-      p2 = (a.poly2[i] * b.poly2[j]) % QBIG2;
+      p1 = a.poly1[i] * b.poly1[j] % QBIG1;
+      p2 = a.poly2[i] * b.poly2[j] % QBIG2;
       k = i + j;
       if (k < D) {
         ref.poly1[k] = (ref.poly1[k] + p1) % QBIG1;
@@ -61,28 +71,21 @@ static int selftest_qbig(void) {
       }
     }
   }
-
-  c = a;
-  d = b;
-  ntt_qbig(&c);
-  ntt_qbig(&d);
-  mult_rqbig(&c, &c, &d);
-  intt_qbig(&c);
-
+  c = a; d = b;
+  ntt_qbig_dense(&c); ntt_qbig_dense(&d);
+  mult_rqbig_dense(&c, &c, &d);
+  intt_qbig_dense(&c);
   for (i = 0; i < D; i++) {
     if (c.poly1[i] != ref.poly1[i] || c.poly2[i] != ref.poly2[i]) {
-      printf("NTT qbig selftest: FALLA en %llu (%llu/%llu vs %llu/%llu)\n",
-             (unsigned long long)i, (unsigned long long)c.poly1[i],
-             (unsigned long long)c.poly2[i], (unsigned long long)ref.poly1[i],
-             (unsigned long long)ref.poly2[i]);
+      printf("NTT qbig denso: FALLA en %llu\n", (unsigned long long)i);
       return 1;
     }
   }
-  printf("NTT qbig selftest: OK\n");
+  printf("NTT qbig denso: OK\n");
   return 0;
 }
 
-/* Lo mismo para R_q (subanillos de grado D/4). */
+/* Igual para R_q (subanillos de grado D/4). */
 static int selftest_rq(void) {
   static POLY_Q a, b, c, ref;
   uint64_t i, j, k, p;
@@ -92,34 +95,90 @@ static int selftest_rq(void) {
     b.poly[i] = (i * 13 + 5) % 1000;
     ref.poly[i] = 0;
   }
-
   for (i = 0; i < D; i++) {
     for (j = 0; j < D; j++) {
-      p = (a.poly[i] * b.poly[j]) % Q;
+      p = a.poly[i] * b.poly[j] % Q;
       k = i + j;
-      if (k < D) {
-        ref.poly[k] = (ref.poly[k] + p) % Q;
-      } else {
-        ref.poly[k - D] = (ref.poly[k - D] + Q - p) % Q;
-      }
+      if (k < D) ref.poly[k] = (ref.poly[k] + p) % Q;
+      else ref.poly[k - D] = (ref.poly[k - D] + Q - p) % Q;
     }
   }
-
-  ntt_q(&a);
-  ntt_q(&b);
-  mult_rq(&c, &a, &b);
-  intt_q(&c);
-
+  ntt_q(&a); ntt_q(&b); mult_rq(&c, &a, &b); intt_q(&c);
   for (i = 0; i < D; i++) {
     if (c.poly[i] != ref.poly[i]) {
-      printf("NTT rq selftest: FALLA en %llu (%llu vs %llu)\n",
-             (unsigned long long)i, (unsigned long long)c.poly[i],
-             (unsigned long long)ref.poly[i]);
+      printf("NTT rq selftest: FALLA en %llu\n", (unsigned long long)i);
       return 1;
     }
   }
   printf("NTT rq selftest: OK\n");
   return 0;
+}
+
+/* Denso vs subanillos: mismo producto en dominio de coeficientes. */
+static int selftest_sub_vs_dense(void) {
+  static POLY_QBIG a, b, d1, d2, s1, s2;
+  uint64_t i;
+
+  for (i = 0; i < D; i++) {
+    a.poly1[i] = (i * 99991ULL + 17ULL) % QBIG1;
+    a.poly2[i] = (i * 88883ULL + 29ULL) % QBIG2;
+    b.poly1[i] = (i * 77771ULL + 41ULL) % QBIG1;
+    b.poly2[i] = (i * 66667ULL + 53ULL) % QBIG2;
+  }
+
+  d1 = a; d2 = b;
+  ntt_qbig_dense(&d1); ntt_qbig_dense(&d2);
+  mult_rqbig_dense(&d1, &d1, &d2);
+  intt_qbig_dense(&d1);
+
+  s1 = a; s2 = b;
+  ntt_qbig_sub(&s1); ntt_qbig_sub(&s2);
+  mult_rqbig_sub(&s1, &s1, &s2);
+  intt_qbig_sub(&s1);
+
+  for (i = 0; i < D; i++) {
+    if (d1.poly1[i] != s1.poly1[i] || d1.poly2[i] != s1.poly2[i]) {
+      printf("denso vs subanillo: FALLA en %llu (%llu/%llu vs %llu/%llu)\n",
+             (unsigned long long)i, (unsigned long long)d1.poly1[i],
+             (unsigned long long)d1.poly2[i], (unsigned long long)s1.poly1[i],
+             (unsigned long long)s1.poly2[i]);
+      return 1;
+    }
+  }
+  printf("denso vs subanillo (S=4): OK\n");
+  return 0;
+}
+
+static void conv_d2s(POLY_QBIG *p, uint64_t n) {
+  uint64_t i;
+  for (i = 0; i < n; i++) {
+    intt_qbig_dense(p + i);
+    ntt_qbig_sub(p + i);
+  }
+}
+
+static void conv_s2d(POLY_QBIG *p, uint64_t n) {
+  uint64_t i;
+  for (i = 0; i < n; i++) {
+    intt_qbig_sub(p + i);
+    ntt_qbig_dense(p + i);
+  }
+}
+
+static void setup_to_sub(void) {
+  conv_d2s(&g_hat[0][0], NHAT_ALL);
+  conv_d2s(t0, M_HAT);
+  conv_d2s(t1, V_1);
+  conv_d2s(t2, V_2);
+  conv_d2s(out.b, N_HAT);
+}
+
+static void setup_to_dense(void) {
+  conv_s2d(&g_hat[0][0], NHAT_ALL);
+  conv_s2d(t0, M_HAT);
+  conv_s2d(t1, V_1);
+  conv_s2d(t2, V_2);
+  conv_s2d(out.b, N_HAT);
 }
 
 int main(void) {
@@ -130,7 +189,7 @@ int main(void) {
          (long long)M, (long long)N, (long long)BETA, (long long)W);
   fflush(stdout);
 
-  if (selftest_qbig() || selftest_rq())
+  if (selftest_qbig() || selftest_rq() || selftest_sub_vs_dense())
     return 2;
 
   srand(20261126);
@@ -139,6 +198,8 @@ int main(void) {
   randombytes(seed, CRYPTO_BYTES);
   fastrandombytes_setseed_pub(seed);
 
+  /* Firma en modo denso. */
+  qbig_mode = 0;
   sample_mat_gr(g);
   sample_mat_gh(h);
   sample_mat_gbig(g_hat);
@@ -158,10 +219,6 @@ int main(void) {
       amt_out[1] = amt - 456;
     }
   }
-  printf("keygen+mint de %lld llaves: OK (gasto en %llu)\n",
-         (long long)N_SPENT, (unsigned long long)l);
-  fflush(stdout);
-
   for (i = 0; i < M; i++) {
     memcpy(ask.r + i, sk[l] + i, sizeof(POLY_Q));
     memcpy(ask.ck + i, ck[l] + i, sizeof(POLY_Q));
@@ -170,18 +227,33 @@ int main(void) {
     memcpy(pk_out[0] + i, a_in[0].pk[0] + i, sizeof(POLY_Q));
     memcpy(pk_out[1] + i, a_in[1].pk[0] + i, sizeof(POLY_Q));
   }
-
   spend(cn_out, &s, &out, a_in, l, &ask, pk_out, amt_out, g, h, g_hat, t0, t1,
         t2);
-  printf("spend: OK\n");
+  printf("keygen+mint (%lld llaves) + spend en DENSO: OK\n",
+         (long long)N_SPENT);
   fflush(stdout);
 
+  /* El mismo testimonio lo lee el modo subanillo. */
+  setup_to_sub();
+  qbig_mode = 1;
   v = verify(a_in, pk_out, cn_out, &out, &s, g, h, g_hat, t0, t1, t2);
+  printf("verificacion cruzada denso -> subanillo: %s (v=%llu)\n",
+         v ? "OK" : "FALLA", (unsigned long long)v);
+  fflush(stdout);
+  if (!v) return 3;
 
-  printf("verificacion: %s (v=%llu)\n", v ? "OK" : "FALLA",
-         (unsigned long long)v);
+  /* Ahora firma en subanillo y lo lee el modo denso. */
+  spend(cn_out, &s, &out, a_in, l, &ask, pk_out, amt_out, g, h, g_hat, t0, t1,
+        t2);
+  printf("spend en SUBANILLO: OK\n");
+  fflush(stdout);
+  setup_to_dense();
+  qbig_mode = 0;
+  v = verify(a_in, pk_out, cn_out, &out, &s, g, h, g_hat, t0, t1, t2);
+  printf("verificacion cruzada subanillo -> denso: %s (v=%llu)\n",
+         v ? "OK" : "FALLA", (unsigned long long)v);
   printf("pago=%llu/%llu\n", (unsigned long long)amt_out[0],
          (unsigned long long)amt_out[1]);
   fflush(stdout);
-  return v ? 0 : 1;
+  return v ? 0 : 3;
 }

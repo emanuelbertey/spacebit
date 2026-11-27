@@ -286,6 +286,174 @@ void mult_rqbig(POLY_QBIG *out, const POLY_QBIG *a, const POLY_QBIG *b) {
 """
 
 
+# Implementacion alternativa estilo Plus: D = K*S con S=4. Solo necesita
+# raices de orden 2K (128 para D=256), no 2D (512). La representacion es
+# a[r*K+i] = A_r(eta^(2i+1)), con A_r(Y)=sum_q a[q*S+r]Y^q.
+POLY_QBIG_SUB_C = r"""/* Multiplicacion en qbig por subanillos (estilo Plus).
+ * D = K*S, S=4. ntt/intt son DFT de longitud K sobre cada residuo r mod S;
+ * mult es schoolbook de grado S con vuelta multiplicada por eta^(2i+1).
+ * Raiz requerida: orden 2K = 2D/S (128 con D=256), no 2D (512).
+ */
+#include "poly_qbig.h"
+#include "poly_param.h"
+#include <stdint.h>
+
+#define SUB_S 4
+#define SUB_K (D / SUB_S)
+
+uint64_t qbig_mode = 0; /* 0 = NTT densa, 1 = subanillos */
+
+extern void ntt_qbig_dense(POLY_QBIG *a);
+extern void intt_qbig_dense(POLY_QBIG *a);
+extern void mult_rqbig_dense(POLY_QBIG *out, const POLY_QBIG *a,
+                             const POLY_QBIG *b);
+
+static uint64_t mpow_s(uint64_t b, uint64_t e, uint64_t q) {
+  uint64_t r = 1 % q;
+  b %= q;
+  while (e) {
+    if (e & 1) r = r * b % q;
+    b = b * b % q;
+    e >>= 1;
+  }
+  return r;
+}
+
+static uint64_t root_order_s(uint64_t q, uint64_t order) {
+  uint64_t e = (q - 1) / order, g, r;
+  for (g = 2; g < 1000000; g++) {
+    r = mpow_s(g, e, q);
+    if (mpow_s(r, order, q) == 1 && mpow_s(r, order >> 1, q) != 1)
+      return r;
+  }
+  return 0;
+}
+
+static uint64_t eta1 = 0, eta2 = 0;
+
+static void init_sub(void) {
+  if (!eta1) eta1 = root_order_s(QBIG1, 2 * (uint64_t)SUB_K);
+  if (!eta2) eta2 = root_order_s(QBIG2, 2 * (uint64_t)SUB_K);
+}
+
+static void bitrev_s(uint64_t *a, uint64_t n) {
+  uint64_t i, j = 0, bit, u;
+  for (i = 1; i < n; i++) {
+    bit = n >> 1;
+    while (j & bit) { j ^= bit; bit >>= 1; }
+    j ^= bit;
+    if (i < j) { u = a[i]; a[i] = a[j]; a[j] = u; }
+  }
+}
+
+static void ct_core_s(uint64_t *a, uint64_t q, uint64_t w, uint64_t n) {
+  uint64_t i, j, len, wl, ww, u, v;
+  bitrev_s(a, n);
+  for (len = 2; len <= n; len <<= 1) {
+    wl = mpow_s(w, n / len, q);
+    for (i = 0; i < n; i += len) {
+      ww = 1;
+      for (j = 0; j < (len >> 1); j++) {
+        u = a[i + j];
+        v = a[i + j + (len >> 1)] * ww % q;
+        a[i + j] = (u + v) % q;
+        a[i + j + (len >> 1)] = (u + q - v) % q;
+        ww = ww * wl % q;
+      }
+    }
+  }
+}
+
+static void ntt_sub_core(uint64_t *a, uint64_t q, uint64_t eta) {
+  uint64_t tmp[SUB_K];
+  uint64_t zeta = eta * eta % q;
+  uint64_t r, qi, i, pw;
+  for (r = 0; r < SUB_S; r++) {
+    pw = 1;
+    for (qi = 0; qi < SUB_K; qi++) {
+      tmp[qi] = (a[qi * SUB_S + r] % q) * pw % q;
+      pw = pw * eta % q;
+    }
+    ct_core_s(tmp, q, zeta, SUB_K);
+    for (i = 0; i < SUB_K; i++) a[r * SUB_K + i] = tmp[i];
+  }
+}
+
+static void intt_sub_core(uint64_t *a, uint64_t q, uint64_t eta) {
+  uint64_t tmp[SUB_K];
+  uint64_t zeta_inv = mpow_s(eta * eta % q, q - 2, q);
+  uint64_t eta_inv = mpow_s(eta, q - 2, q);
+  uint64_t kinv = mpow_s(SUB_K, q - 2, q);
+  uint64_t r, qi, i, pw;
+  for (r = 0; r < SUB_S; r++) {
+    for (i = 0; i < SUB_K; i++) tmp[i] = a[r * SUB_K + i] % q;
+    ct_core_s(tmp, q, zeta_inv, SUB_K);
+    pw = 1;
+    for (qi = 0; qi < SUB_K; qi++) {
+      tmp[qi] = tmp[qi] * kinv % q * pw % q;
+      pw = pw * eta_inv % q;
+    }
+    for (qi = 0; qi < SUB_K; qi++) a[qi * SUB_S + r] = tmp[qi];
+  }
+}
+
+static void mult_sub_core(uint64_t *out, const uint64_t *a, const uint64_t *b,
+                          uint64_t q, uint64_t eta) {
+  uint64_t i, j, k, r, beta, prod;
+  uint64_t ca[SUB_S], cb[SUB_S], co[SUB_S];
+  for (i = 0; i < SUB_K; i++) {
+    beta = mpow_s(eta, 2 * i + 1, q);
+    for (r = 0; r < SUB_S; r++) {
+      ca[r] = a[r * SUB_K + i] % q;
+      cb[r] = b[r * SUB_K + i] % q;
+      co[r] = 0;
+    }
+    for (j = 0; j < SUB_S; j++) {
+      for (k = 0; k < SUB_S; k++) {
+        prod = ca[j] * cb[k] % q;
+        if (j + k < SUB_S)
+          co[j + k] = (co[j + k] + prod) % q;
+        else
+          co[j + k - SUB_S] = (co[j + k - SUB_S] + beta * prod) % q;
+      }
+    }
+    for (r = 0; r < SUB_S; r++) out[r * SUB_K + i] = co[r];
+  }
+}
+
+void ntt_qbig_sub(POLY_QBIG *a) {
+  init_sub();
+  ntt_sub_core(a->poly1, QBIG1, eta1);
+  ntt_sub_core(a->poly2, QBIG2, eta2);
+}
+
+void intt_qbig_sub(POLY_QBIG *a) {
+  init_sub();
+  intt_sub_core(a->poly1, QBIG1, eta1);
+  intt_sub_core(a->poly2, QBIG2, eta2);
+}
+
+void mult_rqbig_sub(POLY_QBIG *out, const POLY_QBIG *a, const POLY_QBIG *b) {
+  init_sub();
+  mult_sub_core(out->poly1, a->poly1, b->poly1, QBIG1, eta1);
+  mult_sub_core(out->poly2, a->poly2, b->poly2, QBIG2, eta2);
+}
+
+void ntt_qbig(POLY_QBIG *a) {
+  if (qbig_mode) ntt_qbig_sub(a); else ntt_qbig_dense(a);
+}
+
+void intt_qbig(POLY_QBIG *a) {
+  if (qbig_mode) intt_qbig_sub(a); else intt_qbig_dense(a);
+}
+
+void mult_rqbig(POLY_QBIG *out, const POLY_QBIG *a, const POLY_QBIG *b) {
+  if (qbig_mode) mult_rqbig_sub(out, a, b);
+  else mult_rqbig_dense(out, a, b);
+}
+"""
+
+
 MULT_OLD_RE = re.compile(
     r"/\* out=a\*b on 4 ntt subrings \*/\s*"
     r"static inline void mult\(uint64_t \*out, const uint64_t \*a, "
@@ -486,8 +654,13 @@ def main():
         raise SystemExit("no encontre el bloque mult() original en poly_q.c")
     p.write_text(t, encoding="utf-8")
 
-    # 6) NTT de qbig generico
-    (dst / "poly_qbig.c").write_text(POLY_QBIG_C, encoding="utf-8")
+    # 6) NTT de qbig: denso + subanillos (estilo Plus), con despacho por modo
+    qbig_dense = (POLY_QBIG_C
+                  .replace("void ntt_qbig(", "void ntt_qbig_dense(")
+                  .replace("void intt_qbig(", "void intt_qbig_dense(")
+                  .replace("void mult_rqbig(", "void mult_rqbig_dense("))
+    (dst / "poly_qbig.c").write_text(qbig_dense, encoding="utf-8")
+    (dst / "poly_qbig_sub.c").write_text(POLY_QBIG_SUB_C, encoding="utf-8")
 
     # 7) tablas del gadget (si se recuperaron)
     if args.gadget:
