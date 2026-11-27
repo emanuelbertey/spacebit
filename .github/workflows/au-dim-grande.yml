@@ -78,6 +78,10 @@ jobs:
             echo '```json'
             cat audit_report_d128.json 2>/dev/null || echo '{"error":"sin reporte"}'
             echo '```'
+            echo "## Log del port"
+            echo '```'
+            cat port_d128.log 2>/dev/null || echo '(sin log)'
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4

@@ -336,6 +336,8 @@ def table_block(decl, entries):
 
 
 def replace_table(text, decl_start, new_block):
+    # Ojo: la tabla original cierra con "}};" en la misma linea de la ultima
+    # entrada, no con un "};" suelto. Delimitamos por la siguiente declaracion.
     lines = text.splitlines()
     start = None
     for i, line in enumerate(lines):
@@ -345,13 +347,14 @@ def replace_table(text, decl_start, new_block):
     if start is None:
         raise SystemExit(f"no encontre la tabla {decl_start}")
     end = None
-    for i in range(start, len(lines)):
-        if lines[i].strip() == "};":
+    for i in range(start + 1, len(lines)):
+        if (lines[i].startswith("static const POLY_QBIG tg_") or
+                lines[i].startswith("void gentdrow(")):
             end = i
             break
     if end is None:
-        raise SystemExit(f"no encontre el cierre de {decl_start}")
-    return "\n".join(lines[:start] + new_block.splitlines() + lines[end + 1:]) + "\n"
+        end = len(lines)
+    return "\n".join(lines[:start] + new_block.splitlines() + lines[end:]) + "\n"
 
 
 T_BAR_QBIG1 = 113567114
