@@ -658,6 +658,38 @@ def main():
         raise SystemExit("no encontre el bloque mult() original en poly_q.c")
     p.write_text(t, encoding="utf-8")
 
+    # 5b) hash canónico: el challenge no debe depender de la representación
+    # NTT (densa vs subanillos). Se hashean coeficientes.
+    p = dst / "hash.c"
+    t = p.read_text(encoding="utf-8")
+    old = """  /* we convert each coordinates to a 32-bit integer within [0,q-1], where q can
+   * be Q, QBIG1, or QBIG2 */
+  for (i = 0; i < N_HAT; i++) {
+    for (j = 0; j < D; j++) {
+      store_32(hash_input_head, a[i].poly1[j]);
+      store_32(hash_input_head + HASH_INPUT_BYTES, a[i].poly2[j]);"""
+    new = """  /* Canonicalizacion: hashear coeficientes, no el dominio NTT, para que el
+   * challenge sea independiente de la representacion (densa vs subanillos). */
+  static POLY_QBIG a_can[N_HAT], b_can[N_HAT];
+  for (i = 0; i < N_HAT; i++) {
+    a_can[i] = a[i];
+    b_can[i] = b[i];
+    intt_qbig(a_can + i);
+    intt_qbig(b_can + i);
+  }
+  for (i = 0; i < N_HAT; i++) {
+    for (j = 0; j < D; j++) {
+      store_32(hash_input_head, a_can[i].poly1[j]);
+      store_32(hash_input_head + HASH_INPUT_BYTES, a_can[i].poly2[j]);"""
+    if old not in t:
+        raise SystemExit("no encontre el bloque de hash de a[]")
+    t = t.replace(old, new, 1)
+    t = t.replace("store_32(hash_input_head, b[i].poly1[j]);",
+                  "store_32(hash_input_head, b_can[i].poly1[j]);", 1)
+    t = t.replace("store_32(hash_input_head + HASH_INPUT_BYTES, b[i].poly2[j]);",
+                  "store_32(hash_input_head + HASH_INPUT_BYTES, b_can[i].poly2[j]);", 1)
+    p.write_text(t, encoding="utf-8")
+
     # 6) NTT de qbig: denso + subanillos (estilo Plus), con despacho por modo
     qbig_dense = (POLY_QBIG_C
                   .replace("void ntt_qbig(", "void ntt_qbig_dense(")
