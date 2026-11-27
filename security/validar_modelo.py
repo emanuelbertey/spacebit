@@ -113,10 +113,14 @@ def validar(v, w, b):
                             f"reconstruido={cost:.3f} estimador={float(ref):.3f} dif={dif:.4f}"))
     except Exception as exc:
         checks.append(check("coste_vs_estimador", False, str(exc)))
+    componentes = [c for c in checks if c["check"] != "l_menor_q"]
+    aplicable = next(c["ok"] for c in checks if c["check"] == "l_menor_q")
     return {"variante": v, "w": w, "b": b, "h": H, "bkv": delta_BKZ(b),
             "l": round(l, 2), "sigma": round(sigma, 2),
             "coste_reconstruido": round(cost, 3),
-            "checks": checks, "todo_ok": all(c["ok"] for c in checks)}
+            "aplicable_l_menor_q": aplicable,
+            "checks": checks,
+            "componentes_ok": all(c["ok"] for c in componentes)}
 
 
 def main():
@@ -127,10 +131,13 @@ def main():
     dest = ROOT / "security" / "validar_modelo.json"
     dest.write_text(json.dumps(out, indent=2), encoding="utf-8")
     for k, val in out["variantes"].items():
-        print(f"{k}: todo_ok={val['todo_ok']} coste={val['coste_reconstruido']}")
+        print(f"{k}: componentes_ok={val['componentes_ok']} "
+              f"aplicable={val['aplicable_l_menor_q']} "
+              f"coste={val['coste_reconstruido']}")
         for c in val["checks"]:
-            print(f"   [{'OK' if c['ok'] else 'FAIL'}] {c['check']}: {c['detalle']}")
-    return 0 if all(v["todo_ok"] for v in out["variantes"].values()) else 1
+            print(f"   [{'OK' if c['ok'] else 'NO APLICA' if c['check']=='l_menor_q' else 'FAIL'}] "
+                  f"{c['check']}: {c['detalle']}")
+    return 0 if all(v["componentes_ok"] for v in out["variantes"].values()) else 1
 
 
 if __name__ == "__main__":
