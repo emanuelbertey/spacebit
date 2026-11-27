@@ -581,6 +581,32 @@ def load_gadget(path):
 N_SPENT_TABLES = BETA - 1  # tg_0 tiene N_SPENT-1 entradas
 
 
+def instrument_spend(text):
+    """Log de intentos de rechazo en la copia generada (no toca auditor/)."""
+    if "#include <stdio.h>" not in text:
+        text = text.replace("#include <stdint.h>",
+                            "#include <stdint.h>\n#include <stdio.h>", 1)
+    decl = "uint64_t i, j, k, rej, e_norm;"
+    if decl not in text:
+        raise SystemExit("no encontre la declaracion de rej en spend.c")
+    text = text.replace(decl, decl + "\n  static unsigned long __intento = 0;", 1)
+    old = "  do {\n    rej = 0;\n"
+    new = """  do {
+    __intento++;
+    if (__intento <= 3 || (__intento % 10) == 0)
+      fprintf(stderr, "[spend] intento %lu\\n", __intento);
+    if (__intento > 60) {
+      fprintf(stderr, "[spend] ABORTE: 60 intentos, rechazo permanente\\n");
+      exit(3);
+    }
+    rej = 0;
+"""
+    if old not in text:
+        raise SystemExit("no encontre el bucle de rechazo en spend.c")
+    text = text.replace(old, new, 1)
+    return text
+
+
 def ntt_py_sub(a, q, eta):
     """NTT por bloques (K=D/4) igual que poly_qbig_sub.c.
     Necesario para D=256, donde no existe raiz de orden 2D en QBIG2."""
@@ -630,6 +656,10 @@ def main():
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(SRC, dst)
+
+    # Logs del bucle de rechazo (solo en la copia generada).
+    p = dst / "spend.c"
+    p.write_text(instrument_spend(p.read_text(encoding="utf-8")), encoding="utf-8")
 
     # 1) D = 128
     p = dst / "poly_param.h"
