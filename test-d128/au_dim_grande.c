@@ -118,49 +118,33 @@ static int selftest_rq(void) {
 /* Denso vs subanillos: mismo producto en dominio de coeficientes. */
 static int selftest_sub_vs_dense(void) {
   static POLY_QBIG a, b, d1, d2, s1, s2;
-  uint64_t i;
+  uint64_t i, t, k;
 
-  for (i = 0; i < D; i++) {
-    a.poly1[i] = (i * 99991ULL + 17ULL) % QBIG1;
-    a.poly2[i] = (i * 88883ULL + 29ULL) % QBIG2;
-    b.poly1[i] = (i * 77771ULL + 41ULL) % QBIG1;
-    b.poly2[i] = (i * 66667ULL + 53ULL) % QBIG2;
-  }
-
-  d1 = a; d2 = b;
-  ntt_qbig_dense(&d1); ntt_qbig_dense(&d2);
-  mult_rqbig_dense(&d1, &d1, &d2);
-  intt_qbig_dense(&d1);
-
-  /* primero: el roundtrip del modo subanillo debe ser identidad */
-  s1 = a;
-  ntt_qbig_sub(&s1);
-  intt_qbig_sub(&s1);
-  for (i = 0; i < D; i++) {
-    if (s1.poly1[i] != a.poly1[i] || s1.poly2[i] != a.poly2[i]) {
-      printf("sub roundtrip: FALLA en %llu (%llu vs %llu)\n",
-             (unsigned long long)i, (unsigned long long)s1.poly1[i],
-             (unsigned long long)a.poly1[i]);
-      return 1;
+  /* 16 pares distintos, comparacion coeficiente por coeficiente. */
+  for (t = 0; t < 16; t++) {
+    for (i = 0; i < D; i++) {
+      a.poly1[i] = (i * (99991ULL + 37ULL * t) + 17ULL + t) % QBIG1;
+      a.poly2[i] = (i * (88883ULL + 41ULL * t) + 29ULL + t) % QBIG2;
+      b.poly1[i] = (i * (77771ULL + 43ULL * t) + 41ULL + t) % QBIG1;
+      b.poly2[i] = (i * (66667ULL + 47ULL * t) + 53ULL + t) % QBIG2;
+    }
+    d1 = a; d2 = b;
+    ntt_qbig_dense(&d1); ntt_qbig_dense(&d2);
+    mult_rqbig_dense(&d1, &d1, &d2);
+    intt_qbig_dense(&d1);
+    s1 = a; s2 = b;
+    ntt_qbig_sub(&s1); ntt_qbig_sub(&s2);
+    mult_rqbig_sub(&s1, &s1, &s2);
+    intt_qbig_sub(&s1);
+    for (k = 0; k < D; k++) {
+      if (d1.poly1[k] != s1.poly1[k] || d1.poly2[k] != s1.poly2[k]) {
+        printf("denso vs subanillo: FALLA par %llu coef %llu\n",
+               (unsigned long long)t, (unsigned long long)k);
+        return 1;
+      }
     }
   }
-  printf("sub roundtrip: OK\n");
-
-  s1 = a; s2 = b;
-  ntt_qbig_sub(&s1); ntt_qbig_sub(&s2);
-  mult_rqbig_sub(&s1, &s1, &s2);
-  intt_qbig_sub(&s1);
-
-  for (i = 0; i < D; i++) {
-    if (d1.poly1[i] != s1.poly1[i] || d1.poly2[i] != s1.poly2[i]) {
-      printf("denso vs subanillo: FALLA en %llu (%llu/%llu vs %llu/%llu)\n",
-             (unsigned long long)i, (unsigned long long)d1.poly1[i],
-             (unsigned long long)d1.poly2[i], (unsigned long long)s1.poly1[i],
-             (unsigned long long)s1.poly2[i]);
-      return 1;
-    }
-  }
-  printf("denso vs subanillo (S=4): OK\n");
+  printf("denso vs subanillo (16 pares, coeficiente a coeficiente): OK\n");
   return 0;
 }
 
@@ -241,7 +225,7 @@ static int test_canonical(void) {
   printf("canonical: polinomio distinto -> challenge distinto: OK\n");
 
   /* 4) cambiar un parametro publico -> transcripcion distinta */
-  gout[0].poly[0] = (gout[0].poly[0] + 1) % Q;
+  gout[0][0].poly[0] = (gout[0][0].poly[0] + 1) % Q;
   hash(&x4, aD, bD, c, d, e0, f0, gout, sd, a_in, pk_out, cn_out);
   for (i = 0; i < D; i++) {
     if (x4.poly[i] != x3.poly[i]) break;
