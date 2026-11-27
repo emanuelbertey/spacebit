@@ -43,8 +43,15 @@ for variante, (w, b) in OPTIMOS.items():
         c = [B[0] / B[1], B[0] / B[2], B[0] / B[3], B[0] / B[4]] if variante == 2 else [1.0] * 4
         i, j, L = construct_BKZ_shape_randomized(Q, nq, n1, b, MM[0], MM[1], MM[2],
                                                  MM[3], MM[4], *c)
-        glv = (nq * math.log(Q) + MM[1] * math.log(c[0]) + MM[2] * math.log(c[1]) +
-               MM[3] * math.log(c[2]) + MM[4] * math.log(c[3]))
+        # El estimador recorta d1..d5 a la dimension efectiva d = nq+n1.
+        d = nq + n1
+        d1 = min(MM[0], d)
+        d2 = min(max(0, d - d1), MM[1])
+        d3 = min(max(0, d - d1 - d2), MM[2])
+        d4 = min(max(0, d - d1 - d2 - d3), MM[3])
+        d5 = min(max(0, d - d1 - d2 - d3 - d4), MM[4])
+        glv = (nq * math.log(Q) + d2 * math.log(c[0]) + d3 * math.log(c[1]) +
+               d4 * math.log(c[2]) + d5 * math.log(c[3]))
 
     lv = sum(L)
     d_ef = j - i + 1
