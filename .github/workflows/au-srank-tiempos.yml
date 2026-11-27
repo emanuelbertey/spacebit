@@ -83,20 +83,27 @@ jobs:
       - name: Correr firmas
         run: |
           set +e
-          for n in 10 30 50; do
-            echo "=== N=$n ==="
-            bash test/build/build.sh "$PWD/auditor_d256_$n" \
-              "$PWD/test-d128/au_d256_sign.c" "firma_$n.exe" \
-              -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$n.log"
-            brc=$?
-            if [ "$brc" -ne 0 ]; then
-              echo "$brc" > "$PWD/rc_$n.txt"
-              echo "BUILD FAIL rc=$brc" > "$PWD/out_$n.txt"
-              continue
-            fi
-            "$PWD/artifacts/firma_$n.exe" > "$PWD/out_$n.txt" 2>&1
-            echo "$?" > "$PWD/rc_$n.txt"
-            cat "$PWD/out_$n.txt"
+          for rank in 2 3 4; do
+            M=$((19 * rank))
+            for n in 10 30 50; do
+              tag="r${rank}_n${n}"
+              echo "=== rank=$rank M=$M N=$n ==="
+              python test-d128/port.py --dim 256 --n-spent $n --M $M \
+                --gadget gadget_polys.txt --tg-factor 8 \
+                --out "src_$tag" 2>&1 | tee "gen_$tag.log"
+              bash test/build/build.sh "$PWD/src_$tag" \
+                "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
+                -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$tag.log"
+              brc=$?
+              if [ "$brc" -ne 0 ]; then
+                echo "$brc" > "$PWD/rc_$tag.txt"
+                echo "BUILD FAIL rc=$brc" > "$PWD/out_$tag.txt"
+                continue
+              fi
+              "$PWD/artifacts/firma_$tag.exe" > "$PWD/out_$tag.txt" 2>&1
+              echo "$?" > "$PWD/rc_$tag.txt"
+              cat "$PWD/out_$tag.txt"
+            done
           done
           exit 0
       - name: JSON
@@ -104,12 +111,15 @@ jobs:
         shell: pwsh
         run: |
           $casos = @()
-          foreach ($n in @(10,30,50)) {
-            $rc = -1
-            if (Test-Path "rc_$n.txt") { $rc = [int]((Get-Content "rc_$n.txt" -Raw).Trim()) }
-            $sal = ""
-            if (Test-Path "out_$n.txt") { $sal = Get-Content "out_$n.txt" -Raw }
-            $casos += [pscustomobject]@{ n=$n; rc=$rc; verificacion=($rc -eq 0); salida=$sal }
+          foreach ($rank in @(2,3,4)) {
+            foreach ($n in @(10,30,50)) {
+              $tag = "r${rank}_n${n}"
+              $rc = -1
+              if (Test-Path "rc_$tag.txt") { $rc = [int]((Get-Content "rc_$tag.txt" -Raw).Trim()) }
+              $sal = ""
+              if (Test-Path "out_$tag.txt") { $sal = Get-Content "out_$tag.txt" -Raw }
+              $casos += [pscustomobject]@{ rank=$rank; n=$n; rc=$rc; verificacion=($rc -eq 0); salida=$sal }
+            }
           }
           [pscustomobject]@{ casos=$casos } | ConvertTo-Json -Depth 4 | Set-Content firmas.json -Encoding utf8
           Get-Content firmas.json
@@ -125,13 +135,7 @@ jobs:
         with:
           name: srank-log
           path: |
-            fuentes_10.log
-            fuentes_30.log
-            fuentes_50.log
-            build_10.log
-            build_30.log
-            build_50.log
-            out_10.txt
-            out_30.txt
-            out_50.txt
+            gen_*.log
+            build_*.log
+            out_*.txt
           if-no-files-found: warn
