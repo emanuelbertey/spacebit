@@ -7,3 +7,7 @@ target/
 # Si volves a bajar el paquete completo, main/ no se versiona:
 # las fuentes que se usan ya estan en auditor/ y plus/.
 main/
+
+# Indice generado por el RAG (se reconstruye con rag.py)
+test-d128/.indice.json
+test-d128/.emb.npy

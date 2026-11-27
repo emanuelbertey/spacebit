@@ -1,7 +1,20 @@
-name: Au en dim mas grande (D=256)
+name: Au D=128 (port real)
 
-# Prueba el esquema Au con dimension de anillo mayor (D=256 en vez de 64).
-# Test nuevo en test-d256/au_dim_grande.c; no toca ninguna fuente original.
+# Porta el esquema Au de D=64 a D=128 y lo compila/corre de verdad.
+#
+# D=128 es el maximo posible sin cambiar los modulos: el NTT de qbig necesita
+# una raiz de orden 2D, y QBIG2-1 solo tiene 2^8 (2D <= 256 => D <= 128).
+#
+# Todo se calcula en Actions:
+#   job "port_y_auditoria" (ubuntu): recupera el gadget con el codigo D=64
+#     original, genera auditor_d128/, audita parametros a D=128 y sube las
+#     fuentes portadas + el JSON de auditoria.
+#   job "au_d128" (windows/msys2): baja las fuentes portadas, compila y corre
+#     la ronda completa (keygen+mint+spend+verify) + autotests de NTT, y sube
+#     resultado_d128.json.
+#
+# `auditor/` original NO se modifica en el repo.
+
 on:
   push:
   workflow_dispatch:
@@ -10,9 +23,78 @@ permissions:
   contents: read
 
 jobs:
-  au_d256:
-    name: Au con D=256 - compilar y correr
+  port_y_auditoria:
+    name: Portar a D=128 y auditar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Recupera los polinomios del gadget usando la implementacion ORIGINAL
+      # (D=64). gentdrow.c se incluye en el helper, por eso se excluye de LIB.
+      - name: Recuperar gadget D=64
+        shell: bash
+        run: |
+          SKIP_EXTRA=gentdrow.c bash test/build/build.sh \
+            auditor "$PWD/test-d128/recover_gadget.c" recover_gadget.exe
+          ./artifacts/recover_gadget.exe > gadget_polys.txt
+          wc -l gadget_polys.txt
+
+      # Fuentes que se compilan/corren en el job de Windows. TG x8 da margen a
+      # las firmas honestas (el port es experimental, no un parametro auditado).
+      - name: Generar auditor_d128 (test, TG x8)
+        shell: bash
+        run: python test-d128/port.py --gadget gadget_polys.txt --tg-factor 8 --out auditor_d128
+
+      # Copia separada con TG de fabrica para la auditoria estatica.
+      - name: Generar copia para auditoria (TG de fabrica)
+        shell: bash
+        run: python test-d128/port.py --tg-factor 1 --out auditor_d128_audit
+
+      - name: Auditar parametros con D=128
+        shell: bash
+        run: |
+          rm -rf auditor
+          mv auditor_d128_audit auditor
+          rc=0
+          python security/audit_config.py || rc=$?
+          cp security/audit_report.json audit_report_d128.json
+          exit $rc
+
+      - name: Resumen de auditoria
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Auditoria de parametros (D=128)"
+            echo '```json'
+            cat audit_report_d128.json 2>/dev/null || echo '{"error":"sin reporte"}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-d128-fuentes
+          path: auditor_d128
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: au-d128-auditoria
+          path: audit_report_d128.json
+          if-no-files-found: error
+
+  au_d128:
+    name: Au D=128 - compilar y correr
+    needs: port_y_auditoria
+    if: always()
     runs-on: windows-latest
+    timeout-minutes: 90
     defaults:
       run:
         shell: msys2 {0}
@@ -23,80 +105,53 @@ jobs:
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc
-      # OJO: auditor/poly_param.h fija "#define D 64LL" sin #ifndef, asi que
-      # -DD=256 lo pisa el header. Para probar D=256 de verdad se compila
-      # sobre una COPIA con D=256; el repo original queda intacto.
-      - name: Compilar Au real D=256 (copia temporal)
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: au-d128-fuentes
+          path: .
+
+      - name: Verificar fuentes portadas
         run: |
-          tmp="$HOME/spacebit-d256-build"
-          rm -rf "$tmp"
-          cp -r "$PWD/." "$tmp"
-          sed -i -E 's/#define[[:space:]]+D[[:space:]]+64LL/#define D 256LL/' "$tmp/auditor/poly_param.h"
-          cd "$tmp"
-          bash test/build/build.sh auditor "$PWD/test-d256/au_dim_grande.c" au_dim_grande.exe -Wl,--stack,67108864
-      - name: Correr prueba (D=256)
+          grep -E '^#define D ' auditor_d128/poly_param.h
+          grep -E 'HASH_OUTPUT_LEN' auditor_d128/param.h
+
+      - name: Compilar Au D=128
+        run: |
+          bash test/build/build.sh "$PWD/auditor_d128" \
+            "$PWD/test-d128/au_dim_grande.c" au_d128.exe -Wl,--stack,134217728
+
+      - name: Correr prueba (D=128)
         if: always()
         run: |
           set +e
-          "$HOME/spacebit-d256-build/artifacts/au_dim_grande.exe" > "$PWD/salida_d256.txt" 2>&1
+          timeout 1800 "$PWD/artifacts/au_d128.exe" > "$PWD/salida_d128.txt" 2>&1
           rc=$?
           set -e
-          echo "$rc" > "$PWD/rc_d256.txt"
-          cat "$PWD/salida_d256.txt"
+          echo "$rc" > "$PWD/rc_d128.txt"
+          cat "$PWD/salida_d128.txt"
           exit 0
+
       - name: Armar JSON del resultado
         if: always()
         shell: pwsh
         run: |
           $rc = -1
-          if (Test-Path rc_d256.txt) { $rc = [int]((Get-Content rc_d256.txt -Raw).Trim()) }
+          if (Test-Path rc_d128.txt) { $rc = [int]((Get-Content rc_d128.txt -Raw).Trim()) }
           $salida = ""
-          if (Test-Path salida_d256.txt) { $salida = Get-Content salida_d256.txt -Raw }
+          if (Test-Path salida_d128.txt) { $salida = Get-Content salida_d128.txt -Raw }
           [pscustomobject]@{
-            dim = 256
+            dim = 128
+            tg_factor = 8
             exit_code = $rc
             verificacion = ($rc -eq 0)
             salida = $salida
-          } | ConvertTo-Json -Depth 3 | Set-Content -Path resultado_d256.json -Encoding utf8
-          Get-Content resultado_d256.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: au-dim-grande-resultado
-          path: resultado_d256.json
-          if-no-files-found: error
+          } | ConvertTo-Json -Depth 3 | Set-Content -Path resultado_d128.json -Encoding utf8
+          Get-Content resultado_d128.json
 
-  auditoria:
-    name: Auditoria de parametros y parches (D=256)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      # Audita sobre una COPIA con D=256; el repo original queda intacto.
-      - name: Auditar parametros con D=256
-        shell: bash
-        run: |
-          tmp="$RUNNER_TEMP/spacebit-d256"
-          rm -rf "$tmp"
-          cp -r "$GITHUB_WORKSPACE/." "$tmp"
-          sed -i -E 's/#define[[:space:]]+D[[:space:]]+64LL/#define D 256LL/' "$tmp/auditor/poly_param.h"
-          rc=0
-          python "$tmp/security/audit_config.py" || rc=$?
-          cp "$tmp/security/audit_report.json" audit_report_d256.json
-          exit $rc
-      - name: Publicar en el resumen
-        if: always()
-        shell: bash
-        run: |
-          echo "## Auditoria de parametros (D=256)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat audit_report_d256.json >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: au-dim-grande-auditoria
-          path: audit_report_d256.json
+          name: au-d128-resultado
+          path: resultado_d128.json
           if-no-files-found: error

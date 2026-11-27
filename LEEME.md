@@ -56,4 +56,15 @@ Detalle completo en `security/README.md`.
 - `plus/`: `test.c`, `tp1.c`, `keygen_zero.c`.
 - `create/tests/v4.rs` (6 tests) y `create_plus/tests/plus.rs` (3 tests).
 
+## RAG
+
+Indice consultable de todo el repo (C/Rust/Python/docs), sin APIs ni modelos
+descargados: búsqueda por tokens con puntaje, más búsqueda exacta de
+`#define` y firmas de funciones. El índice se guarda en `.indice.json`
+(ignorado por git) y se reconstruye con `--rebuild`.
+
+- `python test-d128/rag.py` construye/actualiza el índice.
+- `python test-d128/rag.py "texto a buscar"` consulta por similitud (opción `-k N`).
+- `python test-d128/rag.py --def NAME` / `--fn NAME` búsqueda exacta.
+
 Ver `test/README.md` y `security/README.md`.
