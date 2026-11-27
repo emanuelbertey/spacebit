@@ -34,25 +34,30 @@ jobs:
           set +e
           for rank in 2 3 4; do
             M=$((19 * rank))
-            TG=$((1 << (rank - 1)))
             for n in 10 30; do
               tag="r${rank}_n${n}"
-              echo "=== rank=$rank M=$M N=$n ==="
-              python test-d128/port.py --dim 256 --n-spent $n --M $M \
-                --gadget gadget_polys.txt --tg-factor $TG \
-                --out "src_$tag" 2>&1 | tee "gen_$tag.log"
-              bash test/build/build.sh "$PWD/src_$tag" \
-                "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
-                -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$tag.log"
-              brc=$?
-              if [ "$brc" -ne 0 ]; then
-                echo "$brc" > "$PWD/rc_$tag.txt"
-                echo "BUILD FAIL rc=$brc" > "$PWD/out_$tag.txt"
-                continue
-              fi
-              "$PWD/artifacts/firma_$tag.exe" > "$PWD/out_$tag.txt" 2>&1
-              echo "$?" > "$PWD/rc_$tag.txt"
-              cat "$PWD/out_$tag.txt"
+              : > "$PWD/barrido_$tag.txt"
+              for TG in 2 4 8 16 32 64 128 256; do
+                echo "=== rank=$rank M=$M N=$n TG=$TG ==="
+                python test-d128/port.py --dim 256 --n-spent $n --M $M \
+                  --gadget gadget_polys.txt --tg-factor $TG \
+                  --out "src_$tag" 2>&1 | tee "gen_$tag.log"
+                bash test/build/build.sh "$PWD/src_$tag" \
+                  "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
+                  -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$tag.log"
+                brc=$?
+                if [ "$brc" -ne 0 ]; then
+                  echo "TG=$TG BUILD FAIL rc=$brc" >> "$PWD/barrido_$tag.txt"
+                  continue
+                fi
+                "$PWD/artifacts/firma_$tag.exe" > "$PWD/out_$tag.txt" 2>&1
+                rc=$?
+                echo "TG=$TG rc=$rc" >> "$PWD/barrido_$tag.txt"
+                echo "$rc" > "$PWD/rc_$tag.txt"
+                echo "$TG" > "$PWD/tg_$tag.txt"
+                cat "$PWD/out_$tag.txt"
+                if [ "$rc" -eq 0 ]; then break; fi
+              done
             done
           done
           exit 0
@@ -68,7 +73,9 @@ jobs:
               if (Test-Path "rc_$tag.txt") { $rc = [int]((Get-Content "rc_$tag.txt" -Raw).Trim()) }
               $sal = ""
               if (Test-Path "out_$tag.txt") { $sal = Get-Content "out_$tag.txt" -Raw }
-              $casos += [pscustomobject]@{ rank=$rank; n=$n; rc=$rc; verificacion=($rc -eq 0); salida=$sal }
+              $tg = -1
+              if (Test-Path "tg_$tag.txt") { $tg = [int]((Get-Content "tg_$tag.txt" -Raw).Trim()) }
+              $casos += [pscustomobject]@{ rank=$rank; n=$n; tg=$tg; rc=$rc; verificacion=($rc -eq 0); salida=$sal }
             }
           }
           [pscustomobject]@{ casos=$casos } | ConvertTo-Json -Depth 4 | Set-Content firmas.json -Encoding utf8
@@ -87,6 +94,7 @@ jobs:
             gen_*.log
             build_*.log
             out_*.txt
+            barrido_*.txt
           if-no-files-found: warn
 
   firmas_rank5_montos:
@@ -116,25 +124,30 @@ jobs:
           set +e
           rank=5
           M=$((19 * rank))
-          TG=$((1 << (rank - 1)))
           n=10
           tag="r${rank}_n${n}"
-          echo "=== rank=$rank M=$M N=$n ==="
-          python test-d128/port.py --dim 256 --n-spent $n --M $M \
-            --gadget gadget_polys.txt --tg-factor 8 \
-            --out "src_$tag" 2>&1 | tee "gen_$tag.log"
-          bash test/build/build.sh "$PWD/src_$tag" \
-            "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
-            -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$tag.log"
-          brc=$?
-          if [ "$brc" -ne 0 ]; then
-            echo "$brc" > "$PWD/rc_$tag.txt"
-            echo "BUILD FAIL rc=$brc" > "$PWD/out_$tag.txt"
-          else
+          : > "$PWD/barrido_$tag.txt"
+          for TG in 8 16 32 64 128 256 512 1024; do
+            echo "=== rank=$rank M=$M N=$n TG=$TG ==="
+            python test-d128/port.py --dim 256 --n-spent $n --M $M \
+              --gadget gadget_polys.txt --tg-factor $TG \
+              --out "src_$tag" 2>&1 | tee "gen_$tag.log"
+            bash test/build/build.sh "$PWD/src_$tag" \
+              "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
+              -DBETA=$n -Wl,--stack,134217728 2>&1 | tee "build_$tag.log"
+            brc=$?
+            if [ "$brc" -ne 0 ]; then
+              echo "TG=$TG BUILD FAIL rc=$brc" >> "$PWD/barrido_$tag.txt"
+              continue
+            fi
             "$PWD/artifacts/firma_$tag.exe" > "$PWD/out_$tag.txt" 2>&1
-            echo "$?" > "$PWD/rc_$tag.txt"
-          fi
-          cat "$PWD/out_$tag.txt"
+            rc=$?
+            echo "TG=$TG rc=$rc" >> "$PWD/barrido_$tag.txt"
+            echo "$rc" > "$PWD/rc_$tag.txt"
+            echo "$TG" > "$PWD/tg_$tag.txt"
+            cat "$PWD/out_$tag.txt"
+            if [ "$rc" -eq 0 ]; then break; fi
+          done
           exit 0
       - name: JSON
         if: always()
@@ -144,7 +157,9 @@ jobs:
           if (Test-Path "rc_r5_n10.txt") { $rc = [int]((Get-Content "rc_r5_n10.txt" -Raw).Trim()) }
           $sal = ""
           if (Test-Path "out_r5_n10.txt") { $sal = Get-Content "out_r5_n10.txt" -Raw }
-          [pscustomobject]@{ rank=5; n=10; rc=$rc; verificacion=($rc -eq 0); salida=$sal } |
+          $tg = -1
+          if (Test-Path "tg_r5_n10.txt") { $tg = [int]((Get-Content "tg_r5_n10.txt" -Raw).Trim()) }
+          [pscustomobject]@{ rank=5; n=10; tg=$tg; rc=$rc; verificacion=($rc -eq 0); salida=$sal } |
             ConvertTo-Json -Depth 4 | Set-Content montos.json -Encoding utf8
           Get-Content montos.json
       - uses: actions/upload-artifact@v4
@@ -161,4 +176,5 @@ jobs:
             gen_*.log
             build_*.log
             out_*.txt
+            barrido_*.txt
           if-no-files-found: warn
