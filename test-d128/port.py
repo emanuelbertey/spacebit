@@ -662,6 +662,7 @@ def main():
                     help="gadget_polys.txt recuperado con el codigo original D=64")
     ap.add_argument("--tg-factor", type=int, default=1)
     ap.add_argument("--br-factor", type=int, default=1)
+    ap.add_argument("--z-factor", type=int, default=1)
     args = ap.parse_args()
     D = args.dim
     if args.M is not None:
@@ -746,6 +747,22 @@ def main():
         t = setdef(t, "BR", br)
         # sample_bstar_d usa este factor con BARRETT_SHIFT_BSTAR = 24.
         t = setdef(t, "BARRETT_FACTOR_BR", (1 << 24) // (2 * br + 1))
+
+    # 3c) cotas z (opcional). Las macros originales son expresiones; las
+    # calculamos y las reemplazamos por literales escalados.
+    if args.z_factor != 1:
+        b, p, w, s = (getdef(t, "B"), getdef(t, "P"),
+                      getdef(t, "W"), getdef(t, "S"))
+        mspent = getdef(t, "M_SPENT")
+        bb, bbh, bbk = (getdef(t, "BBIG"), getdef(t, "BBIG_HAT"),
+                        getdef(t, "BBIG_K_PRIME"))
+        zc = (bb - b * p * w) * args.z_factor
+        zb = (bbh - b * p * w) * args.z_factor
+        z0 = zc
+        zm = (bbk - (mspent + s + 1) * b * p * w) * args.z_factor
+        for name, val in (("ZC_NORM", zc), ("ZB_NORM", zb),
+                          ("Z0_NORM", z0), ("ZM_NORM", zm)):
+            t = setdef(t, name, val)
 
     # 3) TG (opcional)
     if args.tg_factor != 1:
