@@ -724,7 +724,10 @@ def main():
 
     # 3b) BR / BRP (opcional): BRP = BR - P se recalcula solo.
     if args.br_factor != 1:
-        t = setdef(t, "BR", getdef(t, "BR") * args.br_factor)
+        br = getdef(t, "BR") * args.br_factor
+        t = setdef(t, "BR", br)
+        # sample_bstar_d usa este factor con BARRETT_SHIFT_BSTAR = 24.
+        t = setdef(t, "BARRETT_FACTOR_BR", (1 << 24) // (2 * br + 1))
 
     # 3) TG (opcional)
     if args.tg_factor != 1:
