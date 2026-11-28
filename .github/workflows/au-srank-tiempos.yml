@@ -38,9 +38,9 @@ jobs:
               tag="r${rank}_n${n}"
               : > "$PWD/barrido_$tag.txt"
               for BR in 64; do
-                echo "=== rank=$rank M=$M N=$n BR=$BR TG=256 ==="
+                echo "=== rank=$rank M=$M N=$n BR=$BR TG=2^36 ==="
                 python test-d128/port.py --dim 256 --n-spent $n --M $M \
-                  --gadget gadget_polys.txt --tg-factor 256 --br-factor $BR \
+                  --gadget gadget_polys.txt --tg-factor 68719476736 --br-factor $BR \
                   --out "src_$tag" 2>&1 | tee "gen_$tag.log"
                 bash test/build/build.sh "$PWD/src_$tag" \
                   "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
@@ -128,9 +128,9 @@ jobs:
           tag="r${rank}_n${n}"
           : > "$PWD/barrido_$tag.txt"
           for BR in 64; do
-            echo "=== rank=$rank M=$M N=$n BR=$BR TG=256 ==="
+            echo "=== rank=$rank M=$M N=$n BR=$BR TG=2^36 ==="
             python test-d128/port.py --dim 256 --n-spent $n --M $M \
-              --gadget gadget_polys.txt --tg-factor 256 --br-factor $BR \
+              --gadget gadget_polys.txt --tg-factor 68719476736 --br-factor $BR \
               --out "src_$tag" 2>&1 | tee "gen_$tag.log"
             bash test/build/build.sh "$PWD/src_$tag" \
               "$PWD/test-d128/au_d256_sign.c" "firma_$tag.exe" \
