@@ -676,6 +676,24 @@ def main():
     p = dst / "spend.c"
     p.write_text(instrument_spend(p.read_text(encoding="utf-8")), encoding="utf-8")
 
+    # Log de tg vs norm dentro de check_gnorm.
+    p = dst / "gnorm.c"
+    g = p.read_text(encoding="utf-8")
+    if "#include <stdio.h>" not in g:
+        g = g.replace("#include <stdint.h>",
+                      "#include <stdint.h>\n#include <stdio.h>", 1)
+    old_g = "  if (num128_lt(&tg, &norm)) {\n    return 1;\n  }"
+    new_g = ("  fprintf(stderr, \"[gnorm] tg=%llu:%llu:%llu:%llu "
+             "norm=%llu:%llu:%llu:%llu\\n\", "
+             "(unsigned long long)tg.coeff[3], (unsigned long long)tg.coeff[2], "
+             "(unsigned long long)tg.coeff[1], (unsigned long long)tg.coeff[0], "
+             "(unsigned long long)norm.coeff[3], (unsigned long long)norm.coeff[2], "
+             "(unsigned long long)norm.coeff[1], (unsigned long long)norm.coeff[0]);\n"
+             + old_g)
+    if old_g not in g:
+        raise SystemExit("no encontre num128_lt en gnorm.c")
+    p.write_text(g.replace(old_g, new_g, 1), encoding="utf-8")
+
     # 1) D = 128
     p = dst / "poly_param.h"
     t = p.read_text(encoding="utf-8")
