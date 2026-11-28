@@ -613,8 +613,8 @@ def instrument_spend(text):
         if viejo not in text:
             raise SystemExit("no encontre todos los chequeos de rechazo")
         nuevo = ("    if (rej) {\n"
-                 '      fprintf(stderr, "[spend] rechazo %s (intento %lu)\\n", '
-                 '"%s", __intento);\n' % etiqueta +
+                 '      fprintf(stderr, "[spend] rechazo ' + etiqueta +
+                 ' (intento %lu)\\n", __intento);\n'
                  "      continue;\n"
                  "    }")
         text = text.replace(viejo, nuevo, 1)
