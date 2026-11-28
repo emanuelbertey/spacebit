@@ -661,6 +661,7 @@ def main():
     ap.add_argument("--gadget", default=None,
                     help="gadget_polys.txt recuperado con el codigo original D=64")
     ap.add_argument("--tg-factor", type=int, default=1)
+    ap.add_argument("--br-factor", type=int, default=1)
     args = ap.parse_args()
     D = args.dim
     if args.M is not None:
@@ -720,6 +721,10 @@ def main():
     }
     for name, val in sizes.items():
         t = setdef(t, name, val)
+
+    # 3b) BR / BRP (opcional): BRP = BR - P se recalcula solo.
+    if args.br_factor != 1:
+        t = setdef(t, "BR", getdef(t, "BR") * args.br_factor)
 
     # 3) TG (opcional)
     if args.tg_factor != 1:
