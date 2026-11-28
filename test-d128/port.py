@@ -604,6 +604,20 @@ def instrument_spend(text):
     if old not in text:
         raise SystemExit("no encontre el bucle de rechazo en spend.c")
     text = text.replace(old, new, 1)
+
+    etiquetas = ("BAP", "F00_NORM", "BRP_1", "BRP_2", "gnorm_TG",
+                 "ZB_NORM", "ZC_NORM", "ZC_out0", "ZC_out1", "Z0_NORM",
+                 "Z0_NORM_2", "ZM_NORM")
+    viejo = "    if (rej) {\n      continue;\n    }"
+    for etiqueta in etiquetas:
+        if viejo not in text:
+            raise SystemExit("no encontre todos los chequeos de rechazo")
+        nuevo = ("    if (rej) {\n"
+                 '      fprintf(stderr, "[spend] rechazo %s (intento %lu)\\n", '
+                 '"%s", __intento);\n' % etiqueta +
+                 "      continue;\n"
+                 "    }")
+        text = text.replace(viejo, nuevo, 1)
     return text
 
 

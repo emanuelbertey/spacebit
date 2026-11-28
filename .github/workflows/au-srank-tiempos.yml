@@ -37,7 +37,7 @@ jobs:
             for n in 10 30; do
               tag="r${rank}_n${n}"
               : > "$PWD/barrido_$tag.txt"
-              for TG in 2 4 8 16 32 64 128 256; do
+              for TG in 8; do
                 echo "=== rank=$rank M=$M N=$n TG=$TG ==="
                 python test-d128/port.py --dim 256 --n-spent $n --M $M \
                   --gadget gadget_polys.txt --tg-factor $TG \
@@ -127,7 +127,7 @@ jobs:
           n=10
           tag="r${rank}_n${n}"
           : > "$PWD/barrido_$tag.txt"
-          for TG in 8 16 32 64 128 256 512 1024; do
+          for TG in 8; do
             echo "=== rank=$rank M=$M N=$n TG=$TG ==="
             python test-d128/port.py --dim 256 --n-spent $n --M $M \
               --gadget gadget_polys.txt --tg-factor $TG \
