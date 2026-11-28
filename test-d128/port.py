@@ -631,6 +631,35 @@ def instrument_spend(text):
     return text
 
 
+def intt_py(a, q, psi):
+    """Inversa de ntt_py (misma mariposa que el C con winv)."""
+    n = len(a)
+    w = psi * psi % q
+    winv = pow(w, q - 2, q)
+    ninv = pow(n, q - 2, q)
+    psi_inv = pow(psi, q - 2, q)
+    for j in range(n):
+        a[j] %= q
+    _bitrev(a)
+    length = 2
+    while length <= n:
+        wl = pow(winv, n // length, q)
+        for i in range(0, n, length):
+            ww = 1
+            for j in range(length // 2):
+                u = a[i + j]
+                v = a[i + j + length // 2] * ww % q
+                a[i + j] = (u + v) % q
+                a[i + j + length // 2] = (u - v) % q
+                ww = ww * wl % q
+        length <<= 1
+    pw = 1
+    for j in range(n):
+        a[j] = a[j] * ninv % q * pw % q
+        pw = pw * psi_inv % q
+    return a
+
+
 def ntt_py_sub(a, q, eta):
     """NTT por bloques (K=D/4) igual que poly_qbig_sub.c.
     Necesario para D=256, donde no existe raiz de orden 2D en QBIG2."""
@@ -859,6 +888,10 @@ def main():
         entries = load_gadget(args.gadget)
         tg0 = []
         tg1 = []
+        # Las tablas vienen en dominio NTT de D_OLD=64: primero a
+        # coeficientes, luego embeber en R_D y recien NTT del tamano destino.
+        psi_old1 = root_2d(QBIG1, D_OLD)
+        psi_old2 = root_2d(QBIG2, D_OLD)
         if D > 128:
             # modo bloques: raiz de orden 2*(D/4), existe en ambos modulos
             psi1 = root_2d(QBIG1, 2 * (D >> 2))
@@ -869,8 +902,10 @@ def main():
             psi2 = root_2d(QBIG2, D)
             conv = ntt_py
         for idx, (p1, p2) in enumerate(entries):
-            e1 = conv(list(p1) + [0] * (D - D_OLD), QBIG1, psi1)
-            e2 = conv(list(p2) + [0] * (D - D_OLD), QBIG2, psi2)
+            c1 = intt_py(list(p1), QBIG1, psi_old1)
+            c2 = intt_py(list(p2), QBIG2, psi_old2)
+            e1 = conv(c1 + [0] * (D - D_OLD), QBIG1, psi1)
+            e2 = conv(c2 + [0] * (D - D_OLD), QBIG2, psi2)
             if idx < N_SPENT_TABLES:
                 tg0.append((e1, e2))
             else:
