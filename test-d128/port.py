@@ -751,15 +751,15 @@ def main():
     # 3c) cotas z (opcional). Las macros originales son expresiones; las
     # calculamos y las reemplazamos por literales escalados.
     if args.z_factor != 1:
-        b, p, w, s = (getdef(t, "B"), getdef(t, "P"),
-                      getdef(t, "W"), getdef(t, "S"))
+        b, pv, w, s = (getdef(t, "B"), getdef(t, "P"),
+                       getdef(t, "W"), getdef(t, "S"))
         mspent = getdef(t, "M_SPENT")
         bb, bbh, bbk = (getdef(t, "BBIG"), getdef(t, "BBIG_HAT"),
                         getdef(t, "BBIG_K_PRIME"))
-        zc = (bb - b * p * w) * args.z_factor
-        zb = (bbh - b * p * w) * args.z_factor
+        zc = (bb - b * pv * w) * args.z_factor
+        zb = (bbh - b * pv * w) * args.z_factor
         z0 = zc
-        zm = (bbk - (mspent + s + 1) * b * p * w) * args.z_factor
+        zm = (bbk - (mspent + s + 1) * b * pv * w) * args.z_factor
         for name, val in (("ZC_NORM", zc), ("ZB_NORM", zb),
                           ("Z0_NORM", z0), ("ZM_NORM", zm)):
             t = setdef(t, name, val)
