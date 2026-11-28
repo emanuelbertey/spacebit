@@ -56,6 +56,16 @@ def setdef(text, name, value):
     return new
 
 
+def setdef_full(text, name, value):
+    """Reemplaza la linea completa de un #define (incluye expresiones)."""
+    import re as _re
+    pat = _re.compile(r"^#define\s+" + _re.escape(name) + r"\s+.*$", _re.M)
+    new, cnt = pat.subn("#define %s %s" % (name, value), text, count=1)
+    if cnt != 1:
+        raise SystemExit(f"no pude reemplazar #define {name}")
+    return new
+
+
 def getdef(text, name):
     m = re.search(r"#define\s+" + re.escape(name) + r"\s+(\S+)", text)
     if not m:
@@ -762,7 +772,7 @@ def main():
         zm = (bbk - (mspent + s + 1) * b * pv * w) * args.z_factor
         for name, val in (("ZC_NORM", zc), ("ZB_NORM", zb),
                           ("Z0_NORM", z0), ("ZM_NORM", zm)):
-            t = setdef(t, name, val)
+            t = setdef_full(t, name, val)
 
     # 3) TG (opcional)
     if args.tg_factor != 1:
