@@ -705,6 +705,20 @@ def main():
         raise SystemExit("no encontre num128_lt en gnorm.c")
     p.write_text(g.replace(old_g, new_g, 1), encoding="utf-8")
 
+    # Log de audit para diagnosticar la recuperacion de montos.
+    p = dst / "audit.c"
+    a = p.read_text(encoding="utf-8")
+    if "#include <stdio.h>" not in a:
+        a = a.replace("#include <stdint.h>",
+                      "#include <stdint.h>\n#include <stdio.h>", 1)
+    old_a = "    /* c''=Rnd_{\\bar{t}}(c') */"
+    new_a = ("    if (i < 6) fprintf(stderr, \"[audit] i=%llu c_pp=%llu m=%llu\\n\", "
+             "(unsigned long long)i, (unsigned long long)c_pp.poly[i], "
+             "(unsigned long long)m_prime.poly[i]);\n" + old_a)
+    if old_a not in a:
+        raise SystemExit("no encontre el punto de rounding en audit.c")
+    p.write_text(a.replace(old_a, new_a, 1), encoding="utf-8")
+
     # 1) D = 128
     p = dst / "poly_param.h"
     t = p.read_text(encoding="utf-8")
